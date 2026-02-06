@@ -62,6 +62,28 @@ namespace RacingCardGame.Core
         /// </summary>
         public static event Action<string> OnPhaseRuleTriggered;
 
+        // ---- 无限火力相位事件 ----
+
+        /// <summary>
+        /// 过热开始事件: (玩家ID, 过热持续秒数)
+        /// </summary>
+        public static event Action<int, float> OnOverheatStarted;
+
+        /// <summary>
+        /// 过热结束事件: 玩家ID
+        /// </summary>
+        public static event Action<int> OnOverheatEnded;
+
+        /// <summary>
+        /// 幽灵保护激活事件: (玩家ID, 保护持续秒数)
+        /// </summary>
+        public static event Action<int, float> OnGhostProtectionActivated;
+
+        /// <summary>
+        /// 幽灵保护结束事件: 玩家ID
+        /// </summary>
+        public static event Action<int> OnGhostProtectionExpired;
+
         // ---- 游戏生命周期事件 ----
 
         /// <summary>
@@ -84,6 +106,10 @@ namespace RacingCardGame.Core
         public static void RaiseTicketConsumed(int playerId, Card.Card card) => OnTicketConsumed?.Invoke(playerId, card);
         public static void RaisePhaseLocked(PhaseType phase) => OnPhaseLocked?.Invoke(phase);
         public static void RaisePhaseRuleTriggered(string description) => OnPhaseRuleTriggered?.Invoke(description);
+        public static void RaiseOverheatStarted(int playerId, float duration) => OnOverheatStarted?.Invoke(playerId, duration);
+        public static void RaiseOverheatEnded(int playerId) => OnOverheatEnded?.Invoke(playerId);
+        public static void RaiseGhostProtectionActivated(int playerId, float duration) => OnGhostProtectionActivated?.Invoke(playerId, duration);
+        public static void RaiseGhostProtectionExpired(int playerId) => OnGhostProtectionExpired?.Invoke(playerId);
         public static void RaiseGameStart() => OnGameStart?.Invoke();
         public static void RaiseGameEnd() => OnGameEnd?.Invoke();
 
@@ -100,6 +126,10 @@ namespace RacingCardGame.Core
             OnTicketConsumed = null;
             OnPhaseLocked = null;
             OnPhaseRuleTriggered = null;
+            OnOverheatStarted = null;
+            OnOverheatEnded = null;
+            OnGhostProtectionActivated = null;
+            OnGhostProtectionExpired = null;
             OnGameStart = null;
             OnGameEnd = null;
         }
@@ -123,10 +153,29 @@ namespace RacingCardGame.Core
         public float RewardMultiplier;
         public float PenaltyMultiplier;
 
+        // 天命效果类型 (用于UI展示和效果分发)
+        public DestinyEffectType DestinyEffect;
+
         // 相位特殊效果描述
         public string PhaseEffectDescription;
 
         // 是否发生了小丑相位的牌面互换
         public bool CardsSwapped;
+
+        // 是否触发了胜天半子 (仅天命赌场相位)
+        public bool IsShengTianBanZi;
+
+        // 无限火力: 过热持续时间 (秒)
+        public float OverheatDuration;
+
+        // 无限火力: 是否触发了幽灵保护
+        public bool GhostProtectionGranted;
+
+        // 止戈相位: 是否发生了剪刀→石头的强制转换
+        public bool ScissorsConverted;
+
+        // 原始出牌 (相位修改前)
+        public CardType OriginalInitiatorCard;
+        public CardType OriginalDefenderCard;
     }
 }

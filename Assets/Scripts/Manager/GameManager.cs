@@ -5,9 +5,9 @@
 // 说明: 游戏会话的生命周期管理器,负责:
 //       - 初始化所有子系统
 //       - 协调游戏开局 (相位锁定、发牌)
-//       - 管理玩家数据 (技能格、手牌)
+//       - 管理玩家数据 (技能格、手牌、幽灵保护)
 //       - 协调子空间对决的发起与结算
-//       - 应用相位特殊效果到具体玩家
+//       - 应用相位特殊效果 (过热计时、幽灵保护追踪)
 //       这是整个系统的入口点和协调者。
 // ============================================================
 
@@ -29,14 +29,14 @@ namespace RacingCardGame.Manager
         public int PlayerId;
         public SkillSlotManager SkillSlots;
         public CardManager Cards;
-        public bool HasGhostProtection; // 幽灵保护 (无限火力相位)
+        public GhostProtectionTracker GhostTracker; // 幽灵保护追踪器 (无限火力相位)
 
-        public PlayerSession(int playerId)
+        public PlayerSession(int playerId, ITimeProvider timeProvider)
         {
             PlayerId = playerId;
-            SkillSlots = new SkillSlotManager(playerId);
+            SkillSlots = new SkillSlotManager(playerId, timeProvider);
             Cards = new CardManager(playerId);
-            HasGhostProtection = false;
+            // GhostTracker在无限火力相位时初始化
         }
     }
 
@@ -63,15 +63,23 @@ namespace RacingCardGame.Manager
         public bool IsGameActive { get; private set; }
 
         /// <summary>
+        /// 时间提供者 (用于过热/幽灵保护计时)
+        /// </summary>
+        public ITimeProvider TimeProvider { get; private set; }
+
+        /// <summary>
         /// 随机数生成器
         /// </summary>
         private readonly Random _random;
 
         public GameManager() : this(new Random()) { }
 
-        public GameManager(Random random)
+        public GameManager(Random random) : this(random, new SystemTimeProvider()) { }
+
+        public GameManager(Random random, ITimeProvider timeProvider)
         {
             _random = random;
+            TimeProvider = timeProvider;
             PhaseManager = new PhaseManager(_random);
             DuelManager = new SubspaceDuelManager(PhaseManager, _random);
 
@@ -82,7 +90,6 @@ namespace RacingCardGame.Manager
         /// <summary>
         /// 初始化游戏会话
         /// </summary>
-        /// <param name="playerIds">参与本局的玩家ID列表</param>
         public void InitializeGame(IEnumerable<int> playerIds)
         {
             if (IsGameActive)
@@ -95,18 +102,14 @@ namespace RacingCardGame.Manager
             // 创建玩家会话
             foreach (int id in playerIds)
             {
-                _players[id] = new PlayerSession(id);
+                _players[id] = new PlayerSession(id, TimeProvider);
             }
 
             // 随机锁定相位
             PhaseBase lockedPhase = PhaseManager.LockRandomPhase();
 
-            // 应用相位对充能速度的影响
-            float chargeMultiplier = lockedPhase.GetChargeSpeedMultiplier();
-            foreach (var session in _players.Values)
-            {
-                session.SkillSlots.ChargeSpeedMultiplier = chargeMultiplier;
-            }
+            // 应用相位特殊初始化
+            ApplyPhaseInitialization(lockedPhase);
 
             // 为每个玩家发初始手牌
             DealInitialCards();
@@ -128,21 +131,39 @@ namespace RacingCardGame.Manager
 
             foreach (int id in playerIds)
             {
-                _players[id] = new PlayerSession(id);
+                _players[id] = new PlayerSession(id, TimeProvider);
             }
 
             PhaseBase lockedPhase = PhaseManager.LockPhase(phaseType);
-
-            float chargeMultiplier = lockedPhase.GetChargeSpeedMultiplier();
-            foreach (var session in _players.Values)
-            {
-                session.SkillSlots.ChargeSpeedMultiplier = chargeMultiplier;
-            }
-
+            ApplyPhaseInitialization(lockedPhase);
             DealInitialCards();
 
             IsGameActive = true;
             GameEvents.RaiseGameStart();
+        }
+
+        /// <summary>
+        /// 应用相位特殊初始化
+        /// </summary>
+        private void ApplyPhaseInitialization(PhaseBase phase)
+        {
+            float chargeMultiplier = phase.GetChargeSpeedMultiplier();
+
+            foreach (var session in _players.Values)
+            {
+                session.SkillSlots.ChargeSpeedMultiplier = chargeMultiplier;
+
+                // 无限火力相位: 初始化幽灵保护追踪器
+                if (phase.Type == PhaseType.InfiniteFirepower)
+                {
+                    session.GhostTracker = new GhostProtectionTracker(
+                        session.PlayerId,
+                        TimeProvider,
+                        InfiniteFirepowerPhase.GhostProtectionPullThreshold,
+                        InfiniteFirepowerPhase.GhostProtectionTimeWindow,
+                        InfiniteFirepowerPhase.GhostProtectionDuration);
+                }
+            }
         }
 
         /// <summary>
@@ -169,9 +190,6 @@ namespace RacingCardGame.Manager
         /// <summary>
         /// 处理玩家漂移充能
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="driftAmount">漂移充能量</param>
-        /// <returns>充能后是否已满</returns>
         public bool HandleDrift(int playerId, float driftAmount)
         {
             ValidateGameActive();
@@ -186,11 +204,6 @@ namespace RacingCardGame.Manager
         /// <summary>
         /// 尝试发起子空间对决
         /// </summary>
-        /// <param name="initiatorId">发起者ID</param>
-        /// <param name="defenderId">防守方ID</param>
-        /// <param name="initiatorChoice">发起者出牌</param>
-        /// <param name="defenderChoice">防守方出牌</param>
-        /// <returns>对决结果; 若前置条件不满足则返回null</returns>
         public DuelResultData TryInitiateDuel(
             int initiatorId, int defenderId,
             CardType initiatorChoice, CardType defenderChoice)
@@ -199,26 +212,34 @@ namespace RacingCardGame.Manager
             var initiator = GetPlayerSession(initiatorId);
             var defender = GetPlayerSession(defenderId);
 
-            // 验证前置条件
+            // 验证发起者前置条件
             var (canInitiate, reason) = DuelManager.ValidateDuelConditions(
                 initiator.SkillSlots, initiator.Cards);
 
             if (!canInitiate)
-            {
                 return null;
+
+            // 验证防守方幽灵保护 (无限火力相位)
+            if (defender.GhostTracker != null)
+            {
+                var (canPull, pullReason) = DuelManager.ValidateDefenderPullable(defender.GhostTracker);
+                if (!canPull)
+                    return null;
             }
 
             // 验证出牌合法性
-            var (validInitiator, reasonI) = DuelManager.ValidateCardChoice(initiatorChoice);
-            if (!validInitiator)
-            {
+            var (validI, _reasonI) = DuelManager.ValidateCardChoice(initiatorChoice);
+            if (!validI)
                 return null;
-            }
 
-            var (validDefender, reasonD) = DuelManager.ValidateCardChoice(defenderChoice);
-            if (!validDefender)
-            {
+            var (validD, _reasonD) = DuelManager.ValidateCardChoice(defenderChoice);
+            if (!validD)
                 return null;
+
+            // 记录防守方被拉入 (幽灵保护计数)
+            if (defender.GhostTracker != null)
+            {
+                defender.GhostTracker.RecordPull();
             }
 
             // 发布对决发起事件
@@ -244,11 +265,10 @@ namespace RacingCardGame.Manager
             var initiator = _players[result.InitiatorId];
             var defender = _players[result.DefenderId];
 
-            // 无限火力相位: 发起者技能过热
-            if (result.ActivePhase == PhaseType.InfiniteFirepower)
+            // 无限火力相位: 发起者技能过热 (带计时)
+            if (result.ActivePhase == PhaseType.InfiniteFirepower && result.OverheatDuration > 0f)
             {
-                initiator.SkillSlots.IsOverheated = true;
-                defender.HasGhostProtection = true;
+                initiator.SkillSlots.StartOverheat(result.OverheatDuration);
             }
         }
 

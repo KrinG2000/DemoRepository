@@ -7,16 +7,19 @@
 //       这是整个对决系统的核心编排者。
 //
 // 对决流程:
-//   1. 验证前置条件 (技能格满、有门票)
-//   2. 消耗门票 (最旧暗牌)
-//   3. 生成天命牌 (随机)
-//   4. 双方出牌
-//   5. 相位预处理 (如小丑互换)
-//   6. 判定胜负 (可能被相位修改规则)
-//   7. 天命牌匹配判定
-//   8. 计算奖惩倍率 (含相位修正)
-//   9. 相位后处理
-//  10. 发布对决结果事件
+//   1. 验证前置条件 (技能格满、有门票、防守方无幽灵保护)
+//   2. 消耗技能格
+//   3. 消耗门票 (最旧暗牌)
+//   4. 生成天命牌 (随机)
+//   5. 记录原始出牌
+//   6. 相位预处理 (止戈: 剪刀→石头; 小丑: 互换)
+//   7. 判定胜负 (可能被相位修改规则)
+//   8. 天命牌匹配判定 (含胜天半子)
+//   9. 转换为天命效果类型
+//  10. 计算奖惩倍率 (含相位修正)
+//  11. 构建结果数据 (含所有新字段)
+//  12. 相位后处理 (过热/幽灵保护)
+//  13. 发布对决结果事件
 // ============================================================
 
 using System;
@@ -43,9 +46,6 @@ namespace RacingCardGame.Duel
         /// <summary>
         /// 验证玩家是否满足发起对决的前置条件
         /// </summary>
-        /// <param name="initiatorSkill">发起者技能格</param>
-        /// <param name="initiatorCards">发起者手牌</param>
-        /// <returns>(是否可发起, 失败原因)</returns>
         public (bool canInitiate, string reason) ValidateDuelConditions(
             SkillSlotManager initiatorSkill, CardManager initiatorCards)
         {
@@ -65,6 +65,18 @@ namespace RacingCardGame.Duel
         }
 
         /// <summary>
+        /// 验证防守方是否可以被拉入对决 (检查幽灵保护)
+        /// </summary>
+        public (bool canPull, string reason) ValidateDefenderPullable(GhostProtectionTracker defenderGhostTracker)
+        {
+            if (defenderGhostTracker != null && defenderGhostTracker.IsProtected)
+            {
+                return (false, $"防守方处于幽灵保护中 (剩余{defenderGhostTracker.RemainingProtectionTime:F1}秒),无法被拉入子空间。");
+            }
+            return (true, null);
+        }
+
+        /// <summary>
         /// 验证出牌是否在当前相位下合法
         /// </summary>
         public (bool valid, string reason) ValidateCardChoice(CardType cardType)
@@ -80,13 +92,6 @@ namespace RacingCardGame.Duel
         /// <summary>
         /// 执行完整的子空间对决流程
         /// </summary>
-        /// <param name="initiatorId">发起者玩家ID</param>
-        /// <param name="defenderId">防守方玩家ID</param>
-        /// <param name="initiatorCards">发起者手牌管理器</param>
-        /// <param name="initiatorSkill">发起者技能格</param>
-        /// <param name="initiatorChoice">发起者出牌选择</param>
-        /// <param name="defenderChoice">防守方出牌选择</param>
-        /// <returns>完整的对决结果数据</returns>
         public DuelResultData ExecuteDuel(
             int initiatorId,
             int defenderId,
@@ -101,21 +106,33 @@ namespace RacingCardGame.Duel
             initiatorSkill.TryActivateSkill();
 
             // === Step 2: 消耗门票 (最旧暗牌) ===
-            Card.Card ticket = initiatorCards.ConsumeTicket();
+            initiatorCards.ConsumeTicket();
             // 门票消耗后不参与对决判定
 
             // === Step 3: 生成天命牌 ===
             CardType destinyCard = GenerateDestinyCard();
 
             // === Step 4: 记录原始出牌 ===
+            CardType originalInitiatorCard = initiatorChoice;
+            CardType originalDefenderCard = defenderChoice;
             CardType finalInitiatorCard = initiatorChoice;
             CardType finalDefenderCard = defenderChoice;
 
-            // === Step 5: 相位预处理 (如小丑互换) ===
+            // === Step 5: 相位预处理 ===
             bool cardsSwapped = false;
+            bool scissorsConverted = false;
+
             if (activePhase != null)
             {
+                // 先执行相位的PreDuelModify (止戈转换剪刀 / 小丑互换)
                 activePhase.PreDuelModify(ref finalInitiatorCard, ref finalDefenderCard, out cardsSwapped);
+
+                // 检测是否发生了剪刀→石头的转换
+                if (activePhase.Type == PhaseType.Ceasefire)
+                {
+                    scissorsConverted = (originalInitiatorCard == CardType.Scissors && finalInitiatorCard == CardType.Rock)
+                                     || (originalDefenderCard == CardType.Scissors && finalDefenderCard == CardType.Rock);
+                }
             }
 
             // === Step 6: 判定胜负 ===
@@ -140,7 +157,18 @@ namespace RacingCardGame.Duel
                 destinyMatch = ResolveStandardDestinyMatch(outcome, finalInitiatorCard, finalDefenderCard, destinyCard);
             }
 
-            // === Step 8: 计算奖惩倍率 (含相位修正) ===
+            // === Step 8: 转换为天命效果类型 ===
+            DestinyEffectType destinyEffect;
+            if (activePhase != null)
+            {
+                destinyEffect = activePhase.ResolveDestinyEffect(destinyMatch);
+            }
+            else
+            {
+                destinyEffect = DestinyEffectType.None;
+            }
+
+            // === Step 9: 计算奖惩倍率 (含相位修正) ===
             float rewardMultiplier = 1.0f;
             float penaltyMultiplier = 1.0f;
             if (activePhase != null)
@@ -148,29 +176,34 @@ namespace RacingCardGame.Duel
                 (rewardMultiplier, penaltyMultiplier) = activePhase.CalculateMultipliers(destinyMatch);
             }
 
-            // === Step 9: 构建结果数据 ===
+            // === Step 10: 构建结果数据 ===
             var result = new DuelResultData
             {
                 InitiatorId = initiatorId,
                 DefenderId = defenderId,
                 InitiatorCard = finalInitiatorCard,
                 DefenderCard = finalDefenderCard,
+                OriginalInitiatorCard = originalInitiatorCard,
+                OriginalDefenderCard = originalDefenderCard,
                 DestinyCard = destinyCard,
                 Outcome = outcome,
                 DestinyMatch = destinyMatch,
+                DestinyEffect = destinyEffect,
                 ActivePhase = activePhase?.Type ?? PhaseType.DestinyGambit,
                 RewardMultiplier = rewardMultiplier,
                 PenaltyMultiplier = penaltyMultiplier,
-                CardsSwapped = cardsSwapped
+                CardsSwapped = cardsSwapped,
+                ScissorsConverted = scissorsConverted,
+                IsShengTianBanZi = (destinyMatch == DestinyMatchType.BothMatchedDraw)
             };
 
-            // === Step 10: 相位后处理 ===
+            // === Step 11: 相位后处理 ===
             if (activePhase != null)
             {
                 activePhase.PostDuelEffect(result);
             }
 
-            // === Step 11: 发布对决结果事件 ===
+            // === Step 12: 发布对决结果事件 ===
             GameEvents.RaiseDuelResolved(result);
 
             return result;

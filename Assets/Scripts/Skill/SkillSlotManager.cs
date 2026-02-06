@@ -51,15 +51,87 @@ namespace RacingCardGame.Skill
 
         /// <summary>
         /// 是否处于过热状态 (无限火力相位: 发起者技能过热)
+        /// 使用时间计算: 只有过热到期后才会恢复
         /// </summary>
-        public bool IsOverheated { get; set; }
+        public bool IsOverheated
+        {
+            get
+            {
+                if (_overheatEndTime < 0f)
+                    return false;
+                if (_timeProvider != null && _timeProvider.CurrentTime >= _overheatEndTime)
+                {
+                    ClearOverheat();
+                    return false;
+                }
+                return true;
+            }
+        }
 
-        public SkillSlotManager(int playerId)
+        /// <summary>
+        /// 过热剩余时间 (秒)
+        /// </summary>
+        public float OverheatRemainingTime
+        {
+            get
+            {
+                if (_overheatEndTime < 0f || _timeProvider == null)
+                    return 0f;
+                float remaining = _overheatEndTime - _timeProvider.CurrentTime;
+                return remaining > 0f ? remaining : 0f;
+            }
+        }
+
+        private float _overheatEndTime = -1f;
+        private ITimeProvider _timeProvider;
+
+        public SkillSlotManager(int playerId) : this(playerId, null) { }
+
+        public SkillSlotManager(int playerId, ITimeProvider timeProvider)
         {
             PlayerId = playerId;
             FilledSlots = 0;
             CurrentCharge = 0f;
-            IsOverheated = false;
+            _overheatEndTime = -1f;
+            _timeProvider = timeProvider;
+        }
+
+        /// <summary>
+        /// 设置时间提供者 (用于过热计时)
+        /// </summary>
+        public void SetTimeProvider(ITimeProvider timeProvider)
+        {
+            _timeProvider = timeProvider;
+        }
+
+        /// <summary>
+        /// 启动过热状态 (持续指定秒数)
+        /// </summary>
+        /// <param name="duration">过热持续秒数</param>
+        public void StartOverheat(float duration)
+        {
+            if (_timeProvider != null)
+            {
+                _overheatEndTime = _timeProvider.CurrentTime + duration;
+                GameEvents.RaiseOverheatStarted(PlayerId, duration);
+            }
+            else
+            {
+                // 无时间提供者时,设置为永久过热 (向后兼容)
+                _overheatEndTime = float.MaxValue;
+            }
+        }
+
+        /// <summary>
+        /// 强制清除过热状态
+        /// </summary>
+        public void ClearOverheat()
+        {
+            if (_overheatEndTime >= 0f)
+            {
+                _overheatEndTime = -1f;
+                GameEvents.RaiseOverheatEnded(PlayerId);
+            }
         }
 
         /// <summary>
@@ -137,7 +209,7 @@ namespace RacingCardGame.Skill
             FilledSlots = 0;
             CurrentCharge = 0f;
             ChargeSpeedMultiplier = 1.0f;
-            IsOverheated = false;
+            _overheatEndTime = -1f;
         }
 
         /// <summary>

@@ -53,7 +53,7 @@ namespace RacingCardGame.Phase
         /// </summary>
         private void RegisterDefaultPhases()
         {
-            RegisterPhase(new DestinyGambitPhase());
+            RegisterPhase(new DestinyGambitPhase(_random));
             RegisterPhase(new JokerPhase(_random));
             RegisterPhase(new CeasefirePhase());
             RegisterPhase(new InfiniteFirepowerPhase());

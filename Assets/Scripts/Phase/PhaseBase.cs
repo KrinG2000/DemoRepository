@@ -105,6 +105,26 @@ namespace RacingCardGame.Phase
         }
 
         /// <summary>
+        /// 将天命匹配转换为天命效果类型 — 用于UI和效果分发
+        /// </summary>
+        public virtual DestinyEffectType ResolveDestinyEffect(DestinyMatchType destinyMatch)
+        {
+            switch (destinyMatch)
+            {
+                case DestinyMatchType.WinnerMatched:
+                    return DestinyEffectType.Crit;
+                case DestinyMatchType.DefenderMatched:
+                    return DestinyEffectType.Counter;
+                case DestinyMatchType.LoserMatched:
+                    return DestinyEffectType.BadLuck;
+                case DestinyMatchType.BothMatchedDraw:
+                    return DestinyEffectType.ShengTianBanZi;
+                default:
+                    return DestinyEffectType.None;
+            }
+        }
+
+        /// <summary>
         /// 计算奖励倍率 — 子类可覆写以调整奖惩
         /// </summary>
         /// <param name="destinyMatch">天命牌匹配结果</param>

@@ -45,7 +45,20 @@ namespace RacingCardGame.Core
         None,               // 双方均未压中天命牌
         WinnerMatched,      // 赢家压中天命牌 -> 奖励加成
         DefenderMatched,    // 防守方压中天命牌 -> 惩罚加成
-        LoserMatched        // 输家压中天命牌 -> 无效运气,无减免
+        LoserMatched,       // 输家压中天命牌 -> 无效运气,无减免
+        BothMatchedDraw     // 胜天半子: 平局且双方都压中天命牌 (仅天命赌场)
+    }
+
+    /// <summary>
+    /// 天命效果类型 — 用于UI展示和效果分发
+    /// </summary>
+    public enum DestinyEffectType
+    {
+        None,               // 无天命效果
+        Crit,               // 天命暴击: 赢家压中天命,奖励加成 (加速/氮气/技能重置)
+        Counter,            // 天命反杀: 防守方压中天命,惩罚加成
+        BadLuck,            // 无效运气: 输家压中天命,无减免,UI显示DEFEAT
+        ShengTianBanZi      // 胜天半子: 平局+双方压中天命,双方获得1.25~1.30x奖励
     }
 
     /// <summary>

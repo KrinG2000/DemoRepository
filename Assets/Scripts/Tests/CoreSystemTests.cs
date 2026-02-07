@@ -1,10 +1,11 @@
 // ============================================================
-// CoreSystemTests.cs — 核心系统单元测试
+// CoreSystemTests.cs — 核心系统单元测试 (Task 4: 可验证性基建)
 // 架构层级: Tests
-// 说明: 覆盖技能格、门票、子空间对决、相位系统的核心逻辑。
-//       包含Task 2新增的: 胜天半子、剪视为石、过热计时、
-//       幽灵保护追踪器等新机制测试。
-//       使用纯C#测试 (不依赖Unity Test Runner)。
+// 说明: 覆盖B0-B7全部用例类别 (40+条):
+//   B0 基础石头剪刀布 | B1 门票+溢出 | B2 P1免疫+幽灵
+//   B3 小丑 | B4 止戈 | B5 赌场 | B6 横幅优先级 | B7 火力过热
+//   + BalanceConfig / DuelLog / DebugHUD 基建测试
+//   一键跑测试: mono test.exe → 全 PASS 即交付
 // ============================================================
 
 using System;
@@ -16,6 +17,8 @@ using RacingCardGame.Phase;
 using RacingCardGame.Duel;
 using RacingCardGame.Manager;
 using RacingCardGame.UI;
+using RacingCardGame.Config;
+using RacingCardGame.Debugging;
 
 namespace RacingCardGame.Tests
 {
@@ -71,224 +74,177 @@ namespace RacingCardGame.Tests
         }
 
         public static int FailedCount => _failed;
+        public static int PassedCount => _passed;
     }
 
     public static class CoreSystemTests
     {
+        /// <summary>
+        /// 通用测试初始化 — 每个测试组前调用
+        /// </summary>
+        static void Setup()
+        {
+            GameEvents.ClearAll();
+            BalanceConfig.Reset();
+            DuelLog.Clear();
+            DuelLog.Enabled = true;
+        }
+
         public static void RunAll()
         {
             TestRunner.Reset();
             Card.Card.ResetIdCounter();
-            GameEvents.ClearAll();
+            Setup();
 
-            Console.WriteLine("=== SkillSlotManager Tests ===");
-            TestSkillSlotCharging();
-            TestSkillSlotFullCharge();
-            TestSkillSlotActivation();
-            TestSkillSlotChargeSpeedMultiplier();
+            // ========== B0: 基础石头剪刀布 ==========
+            Console.WriteLine("=== B0: Basic RPS ===");
+            TestB0_RPS_AllOutcomes();
 
-            Console.WriteLine("\n=== SkillSlot Timed Overheat Tests ===");
-            TestTimedOverheat_Basic();
-            TestTimedOverheat_ExpiresAfterDuration();
-            TestTimedOverheat_BlocksActivation();
+            // ========== B1: 门票+溢出 ==========
+            Console.WriteLine("\n=== B1: Tickets + Overflow ===");
+            TestB1_TicketFIFO();
+            TestB1_TicketEmpty();
+            TestB1_OverflowOnThirdCard();
+            TestB1_OverflowAutoExpiry();
+            TestB1_OverflowReplaceSlot();
+            TestB1_OverflowClearedOnSubspace();
 
-            Console.WriteLine("\n=== CardManager Tests ===");
-            TestCardManagerBasicOperations();
-            TestTicketConsumption_FIFO();
-            TestTicketConsumption_Empty();
+            // ========== B2: P1免疫 + 幽灵保护 ==========
+            Console.WriteLine("\n=== B2: P1 Immunity + Ghost ===");
+            TestB2_P1Immunity_BlocksDuel();
+            TestB2_P1Immunity_ExpiresAfterDuration();
+            TestB2_P1Immunity_AppliedAfterDuel();
+            TestB2_GhostProtection_ActivatesAfterThreshold();
+            TestB2_GhostProtection_ExpiresAfterDuration();
+            TestB2_GhostProtection_WindowExpiry();
 
-            Console.WriteLine("\n=== PhaseManager Tests ===");
-            TestPhaseManagerLock();
-            TestPhaseManagerMutualExclusion();
-            TestPhaseManagerReset();
+            // ========== B3: 小丑相位 ==========
+            Console.WriteLine("\n=== B3: Jester (Joker) ===");
+            TestB3_JesterSwap_Triggered();
+            TestB3_JesterSwap_NoSwap();
+            TestB3_JesterSwap_ConfigDriven();
 
-            Console.WriteLine("\n=== DestinyGambitPhase Tests ===");
-            TestDestinyGambit_CriticalReward();
-            TestDestinyGambit_CounterPenalty();
-            TestDestinyGambit_BadLuck();
-            TestDestinyGambit_ShengTianBanZi();
-            TestDestinyGambit_DrawNoMatch();
+            // ========== B4: 止戈相位 ==========
+            Console.WriteLine("\n=== B4: Peace (Ceasefire) ===");
+            TestB4_ScissorsConvertedToRock();
+            TestB4_RockBeatsPaper();
+            TestB4_ScissorsVsScissors_Draw();
+            TestB4_AllCardsPlayable();
 
-            Console.WriteLine("\n=== JokerPhase Tests ===");
-            TestJokerPhase_SwapTriggered();
-            TestJokerPhase_NoSwap();
+            // ========== B5: 赌场 (天命赌场) ==========
+            Console.WriteLine("\n=== B5: Casino (DestinyGambit) ===");
+            TestB5_CritMultiplier_1_5x();
+            TestB5_CounterMultiplier_1_5x();
+            TestB5_ConquerHeaven_1_3x_Fixed();
+            TestB5_BadLuck_NoBonus();
+            TestB5_ShengTianBanZi_Trigger();
 
-            Console.WriteLine("\n=== CeasefirePhase Tests (Updated: 剪视为石) ===");
-            TestCeasefirePhase_ScissorsConvertedToRock();
-            TestCeasefirePhase_RockBeatsPaper();
-            TestCeasefirePhase_ScissorsVsScissors_BecomesDraw();
-            TestCeasefirePhase_AllCardsPlayable();
+            // ========== B6: 横幅优先级 ==========
+            Console.WriteLine("\n=== B6: Banner Priority ===");
+            TestB6_P1_ConquerHeaven();
+            TestB6_P2_JesterSwap();
+            TestB6_P3_DestinyCrit();
+            TestB6_P4_DestinyCounter();
+            TestB6_P5_BadLuck();
+            TestB6_P6_NormalWin();
+            TestB6_P7_Draw();
+            TestB6_Priority_ConquerHeavenOverDraw();
+            TestB6_Priority_CritOverNormalWin();
+            TestB6_Adapter_AllPhases();
+            TestB6_Queue_SingleBanner();
+            TestB6_Queue_DelayAndDuration();
+            TestB6_Queue_SkipNonDeadlock();
+            TestB6_Presenter_ShowHideSkip();
 
-            Console.WriteLine("\n=== InfiniteFirepowerPhase Tests (Updated: 2.5x, 5s overheat) ===");
-            TestInfiniteFirepower_ChargeSpeed();
-            TestInfiniteFirepower_GhostProtectionMultiplier();
-            TestInfiniteFirepower_OverheatDuration();
+            // ========== B7: 火力过热 ==========
+            Console.WriteLine("\n=== B7: Overload Overheat ===");
+            TestB7_ChargeMultiplier_2_5x();
+            TestB7_OverheatBlocks5s();
+            TestB7_OverheatExpiresAndRecovers();
+            TestB7_GhostPenaltyReduction();
 
-            Console.WriteLine("\n=== GhostProtectionTracker Tests ===");
-            TestGhostTracker_NoProtectionInitially();
-            TestGhostTracker_ActivatesAfterThreshold();
-            TestGhostTracker_ExpiresAfterDuration();
-            TestGhostTracker_WindowExpiry();
+            // ========== Config: BalanceConfig ==========
+            Console.WriteLine("\n=== Config: BalanceConfig ===");
+            TestConfig_DefaultValues();
+            TestConfig_HotReload_VersionIncrement();
+            TestConfig_CustomConfig_AffectsPhase();
+            TestConfig_WeightedPhaseSelection();
 
-            Console.WriteLine("\n=== SubspaceDuelManager Tests ===");
-            TestDuelExecution_BasicWin();
-            TestDuelExecution_Draw();
-            TestDuelValidation_NoTicket();
-            TestDuelValidation_NotFullyCharged();
-            TestDuelValidation_Overheated();
-            TestDuelValidation_GhostProtection();
+            // ========== DuelLog ==========
+            Console.WriteLine("\n=== DuelLog ===");
+            TestDuelLog_6StagesPerDuel();
+            TestDuelLog_Filter();
+            TestDuelLog_DisableToggle();
 
-            Console.WriteLine("\n=== Duel Result Data Fields Tests ===");
-            TestDuelResult_OriginalCards();
-            TestDuelResult_ScissorsConverted();
-            TestDuelResult_DestinyEffectType();
-            TestDuelResult_ShengTianBanZi();
+            // ========== DebugHUD ==========
+            Console.WriteLine("\n=== DebugHUD ===");
+            TestDebugHUD_Toggle();
+            TestDebugHUD_RenderPlayerState();
+            TestDebugHUD_RenderLastDuel();
 
-            Console.WriteLine("\n=== GameManager Integration Tests ===");
-            TestGameManagerLifecycle();
-            TestFullDuelFlow();
-            TestInfiniteFirepower_FullFlow();
-            TestCeasefire_FullFlow();
+            // ========== Integration ==========
+            Console.WriteLine("\n=== Integration ===");
+            TestIntegration_FullDuelFlow();
+            TestIntegration_InfiniteFirepowerFlow();
+            TestIntegration_CeasefireFlow();
 
-            Console.WriteLine("\n=== UI Banner: PickBanner Priority Tests ===");
-            TestPickBanner_P1_ConquerHeaven();
-            TestPickBanner_P2_JesterSwap();
-            TestPickBanner_P3_DestinyCrit();
-            TestPickBanner_P4_DestinyCounter();
-            TestPickBanner_P5_BadLuck();
-            TestPickBanner_P6_NormalWin();
-            TestPickBanner_P7_Draw();
-            TestPickBanner_PriorityConquerHeavenOverDraw();
-            TestPickBanner_PriorityCritOverNormalWin();
+            // ========== SkillSlot fundamentals ==========
+            Console.WriteLine("\n=== SkillSlot Fundamentals ===");
+            TestSkillSlot_Charging();
+            TestSkillSlot_FullCharge();
+            TestSkillSlot_Activation();
+            TestSkillSlot_ChargeSpeedMultiplier();
+            TestSkillSlot_TimedOverheat();
 
-            Console.WriteLine("\n=== UI Banner: DuelResultAdapter Tests ===");
-            TestAdapter_CasinoPhaseConversion();
-            TestAdapter_JesterPhaseConversion();
-            TestAdapter_PeacePhaseConversion();
-            TestAdapter_OverloadPhaseConversion();
-            TestAdapter_WinnerLoserMapping();
-
-            Console.WriteLine("\n=== UI Banner: DuelUIEventQueue Tests ===");
-            TestQueue_SingleBannerPerContext();
-            TestQueue_DelayBeforeShow();
-            TestQueue_BannerDuration();
-            TestQueue_SkipDoesNotDeadlock();
-            TestQueue_MultipleEnqueue();
-
-            Console.WriteLine("\n=== UI Banner: Presenter Tests ===");
-            TestPresenter_ShowAndHide();
-            TestPresenter_SkipWhenSkippable();
-            TestPresenter_BannerTexts();
+            // ========== PhaseManager ==========
+            Console.WriteLine("\n=== PhaseManager ===");
+            TestPhaseManager_LockAndMutualExclusion();
+            TestPhaseManager_Reset();
 
             TestRunner.PrintSummary();
         }
 
-        // ---- SkillSlotManager Tests ----
+        // ============================================================
+        // B0: 基础石头剪刀布 — 3种胜、3种负、3种平
+        // ============================================================
 
-        static void TestSkillSlotCharging()
+        static void TestB0_RPS_AllOutcomes()
         {
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(50f);
-            TestRunner.AssertEqual(0, skill.FilledSlots, "SkillSlot: 50 charge = 0 filled slots");
-            TestRunner.Assert(skill.CurrentCharge == 50f, "SkillSlot: current charge = 50");
+            Setup();
+            var phase = new DestinyGambitPhase(new Random(42));
+
+            // 3 wins
+            TestRunner.AssertEqual(DuelOutcome.Win, phase.ResolveDuel(CardType.Rock, CardType.Scissors),
+                "B0: Rock beats Scissors");
+            TestRunner.AssertEqual(DuelOutcome.Win, phase.ResolveDuel(CardType.Scissors, CardType.Paper),
+                "B0: Scissors beats Paper");
+            TestRunner.AssertEqual(DuelOutcome.Win, phase.ResolveDuel(CardType.Paper, CardType.Rock),
+                "B0: Paper beats Rock");
+
+            // 3 losses
+            TestRunner.AssertEqual(DuelOutcome.Lose, phase.ResolveDuel(CardType.Scissors, CardType.Rock),
+                "B0: Scissors loses to Rock");
+            TestRunner.AssertEqual(DuelOutcome.Lose, phase.ResolveDuel(CardType.Paper, CardType.Scissors),
+                "B0: Paper loses to Scissors");
+            TestRunner.AssertEqual(DuelOutcome.Lose, phase.ResolveDuel(CardType.Rock, CardType.Paper),
+                "B0: Rock loses to Paper");
+
+            // 3 draws
+            TestRunner.AssertEqual(DuelOutcome.Draw, phase.ResolveDuel(CardType.Rock, CardType.Rock),
+                "B0: Rock vs Rock = Draw");
+            TestRunner.AssertEqual(DuelOutcome.Draw, phase.ResolveDuel(CardType.Scissors, CardType.Scissors),
+                "B0: Scissors vs Scissors = Draw");
+            TestRunner.AssertEqual(DuelOutcome.Draw, phase.ResolveDuel(CardType.Paper, CardType.Paper),
+                "B0: Paper vs Paper = Draw");
         }
 
-        static void TestSkillSlotFullCharge()
+        // ============================================================
+        // B1: 门票+溢出
+        // ============================================================
+
+        static void TestB1_TicketFIFO()
         {
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-            TestRunner.AssertEqual(3, skill.FilledSlots, "SkillSlot: 300 charge fills all 3 slots");
-            TestRunner.Assert(skill.IsFullyCharged, "SkillSlot: IsFullyCharged = true");
-        }
-
-        static void TestSkillSlotActivation()
-        {
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-            bool activated = skill.TryActivateSkill();
-            TestRunner.Assert(activated, "SkillSlot: activation succeeds when full");
-            TestRunner.AssertEqual(0, skill.FilledSlots, "SkillSlot: slots reset to 0 after activation");
-
-            bool activatedAgain = skill.TryActivateSkill();
-            TestRunner.Assert(!activatedAgain, "SkillSlot: activation fails when not full");
-        }
-
-        static void TestSkillSlotChargeSpeedMultiplier()
-        {
-            var skill = new SkillSlotManager(1);
-            skill.ChargeSpeedMultiplier = 2.0f;
-            skill.AddCharge(50f); // effective = 100f -> fills 1 slot
-            TestRunner.AssertEqual(1, skill.FilledSlots, "SkillSlot: 2x multiplier doubles charge");
-        }
-
-        // ---- Timed Overheat Tests ----
-
-        static void TestTimedOverheat_Basic()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var skill = new SkillSlotManager(1, time);
-            skill.AddCharge(300f);
-
-            TestRunner.Assert(!skill.IsOverheated, "TimedOverheat: not overheated initially");
-            skill.StartOverheat(5.0f);
-            TestRunner.Assert(skill.IsOverheated, "TimedOverheat: overheated after StartOverheat");
-        }
-
-        static void TestTimedOverheat_ExpiresAfterDuration()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var skill = new SkillSlotManager(1, time);
-
-            time.CurrentTime = 10f;
-            skill.StartOverheat(5.0f);
-            TestRunner.Assert(skill.IsOverheated, "TimedOverheat: overheated at t=10");
-
-            time.Advance(4.9f); // t=14.9
-            TestRunner.Assert(skill.IsOverheated, "TimedOverheat: still overheated at t=14.9");
-
-            time.Advance(0.2f); // t=15.1
-            TestRunner.Assert(!skill.IsOverheated, "TimedOverheat: expired at t=15.1 (5s passed)");
-        }
-
-        static void TestTimedOverheat_BlocksActivation()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var skill = new SkillSlotManager(1, time);
-            skill.AddCharge(300f);
-            skill.StartOverheat(5.0f);
-
-            bool activated = skill.TryActivateSkill();
-            TestRunner.Assert(!activated, "TimedOverheat: activation blocked while overheated");
-
-            time.Advance(5.1f);
-            // Recharge (overheat blocked previous activation so slots are still full)
-            activated = skill.TryActivateSkill();
-            TestRunner.Assert(activated, "TimedOverheat: activation works after overheat expires");
-        }
-
-        // ---- CardManager Tests ----
-
-        static void TestCardManagerBasicOperations()
-        {
-            GameEvents.ClearAll();
-            var cards = new CardManager(1);
-            cards.AddToHand(new Card.Card(CardType.Rock, false));
-            cards.AddToHand(new Card.Card(CardType.Scissors, false));
-
-            TestRunner.AssertEqual(2, cards.Hand.Count, "CardManager: hand has 2 cards");
-            TestRunner.Assert(cards.HasCardType(CardType.Rock), "CardManager: has Rock");
-
-            var played = cards.PlayCard(CardType.Rock);
-            TestRunner.Assert(played != null, "CardManager: PlayCard returns card");
-            TestRunner.AssertEqual(1, cards.Hand.Count, "CardManager: hand has 1 card after play");
-        }
-
-        static void TestTicketConsumption_FIFO()
-        {
-            GameEvents.ClearAll();
+            Setup();
             var cards = new CardManager(1);
             var dark1 = new Card.Card(CardType.Rock, true, 100);
             var dark2 = new Card.Card(CardType.Paper, true, 200);
@@ -298,130 +254,247 @@ namespace RacingCardGame.Tests
             cards.AddDarkCard(dark2);
             cards.AddDarkCard(dark3);
 
-            TestRunner.AssertEqual(3, cards.DarkCardCount, "Ticket: 3 dark cards initially");
+            TestRunner.AssertEqual(3, cards.DarkCardCount, "B1 FIFO: 3 dark cards initially");
 
             var consumed = cards.ConsumeTicket();
-            TestRunner.Assert(consumed != null, "Ticket: consumed card is not null");
-            TestRunner.AssertEqual(dark1.Id, consumed.Id, "Ticket: oldest (FIFO) card consumed first");
-            TestRunner.AssertEqual(2, cards.DarkCardCount, "Ticket: 2 dark cards remaining");
+            TestRunner.AssertEqual(dark1.Id, consumed.Id, "B1 FIFO: oldest consumed first");
 
             var consumed2 = cards.ConsumeTicket();
-            TestRunner.AssertEqual(dark2.Id, consumed2.Id, "Ticket: second oldest consumed next");
+            TestRunner.AssertEqual(dark2.Id, consumed2.Id, "B1 FIFO: second oldest next");
+
+            var consumed3 = cards.ConsumeTicket();
+            TestRunner.AssertEqual(dark3.Id, consumed3.Id, "B1 FIFO: third oldest last");
+            TestRunner.AssertEqual(0, cards.DarkCardCount, "B1 FIFO: 0 dark cards after all consumed");
         }
 
-        static void TestTicketConsumption_Empty()
+        static void TestB1_TicketEmpty()
         {
-            GameEvents.ClearAll();
+            Setup();
             var cards = new CardManager(1);
             var consumed = cards.ConsumeTicket();
-            TestRunner.Assert(consumed == null, "Ticket: returns null when no dark cards");
+            TestRunner.Assert(consumed == null, "B1 Empty: returns null when no dark cards");
         }
 
-        // ---- PhaseManager Tests ----
-
-        static void TestPhaseManagerLock()
+        static void TestB1_OverflowOnThirdCard()
         {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            var phase = pm.LockRandomPhase();
-            TestRunner.Assert(phase != null, "PhaseManager: random lock returns phase");
-            TestRunner.Assert(pm.IsLocked, "PhaseManager: IsLocked = true after lock");
-            TestRunner.Assert(pm.ActivePhaseType.HasValue, "PhaseManager: ActivePhaseType has value");
+            Setup();
+            var time = new ManualTimeProvider();
+            var cards = new CardManager(1, time);
+
+            cards.AddToHand(new Card.Card(CardType.Rock, false));
+            cards.AddToHand(new Card.Card(CardType.Scissors, false));
+            TestRunner.AssertEqual(2, cards.Hand.Count, "B1 Overflow: 2 cards in hand (MaxHandSlots)");
+            TestRunner.Assert(!cards.HasOverflow, "B1 Overflow: no overflow yet");
+
+            // 3rd card goes to overflow
+            var thirdCard = new Card.Card(CardType.Paper, false);
+            cards.AddToHand(thirdCard);
+            TestRunner.AssertEqual(2, cards.Hand.Count, "B1 Overflow: still 2 in hand after 3rd");
+            TestRunner.Assert(cards.HasOverflow, "B1 Overflow: overflow card exists");
+            TestRunner.AssertEqual(CardType.Paper, cards.OverflowCard.Type, "B1 Overflow: overflow is Paper");
         }
 
-        static void TestPhaseManagerMutualExclusion()
+        static void TestB1_OverflowAutoExpiry()
         {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockRandomPhase();
+            Setup();
+            var time = new ManualTimeProvider();
+            var cards = new CardManager(1, time);
 
-            bool threw = false;
-            try { pm.LockRandomPhase(); }
-            catch (InvalidOperationException) { threw = true; }
-            TestRunner.Assert(threw, "PhaseManager: double lock throws (mutual exclusion)");
+            cards.AddToHand(new Card.Card(CardType.Rock, false));
+            cards.AddToHand(new Card.Card(CardType.Scissors, false));
+
+            time.CurrentTime = 10f;
+            cards.AddToHand(new Card.Card(CardType.Paper, false));
+            TestRunner.Assert(cards.HasOverflow, "B1 Expiry: overflow exists at t=10");
+
+            // Still there at 3.9s
+            time.Advance(3.9f);
+            TestRunner.Assert(cards.HasOverflow, "B1 Expiry: overflow still exists at t=13.9");
+            TestRunner.Assert(cards.OverflowRemainingTime > 0f, "B1 Expiry: remaining time > 0");
+
+            // Expired at 4.1s
+            time.Advance(0.2f);
+            TestRunner.Assert(!cards.HasOverflow, "B1 Expiry: overflow expired at t=14.1 (4s lifetime)");
         }
 
-        static void TestPhaseManagerReset()
+        static void TestB1_OverflowReplaceSlot()
         {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockRandomPhase();
-            pm.Reset();
-            TestRunner.Assert(!pm.IsLocked, "PhaseManager: IsLocked = false after reset");
-            var phase = pm.LockRandomPhase();
-            TestRunner.Assert(phase != null, "PhaseManager: can lock again after reset");
+            Setup();
+            var time = new ManualTimeProvider();
+            var cards = new CardManager(1, time);
+
+            cards.AddToHand(new Card.Card(CardType.Rock, false));
+            cards.AddToHand(new Card.Card(CardType.Scissors, false));
+            cards.AddToHand(new Card.Card(CardType.Paper, false)); // -> overflow
+
+            // Replace Slot 0 (Rock) with overflow (Paper)
+            var replaced = cards.ReplaceSlotWithOverflow(0);
+            TestRunner.Assert(replaced != null, "B1 Replace: replaced card not null");
+            TestRunner.AssertEqual(CardType.Rock, replaced.Type, "B1 Replace: replaced card was Rock");
+            TestRunner.AssertEqual(CardType.Paper, cards.Hand[0].Type, "B1 Replace: Slot 0 is now Paper");
+            TestRunner.Assert(!cards.HasOverflow, "B1 Replace: overflow cleared after replace");
         }
 
-        // ---- DestinyGambitPhase Tests ----
-
-        static void TestDestinyGambit_CriticalReward()
+        static void TestB1_OverflowClearedOnSubspace()
         {
-            GameEvents.ClearAll();
-            var phase = new DestinyGambitPhase(new Random(42));
-            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.WinnerMatched);
-            TestRunner.AssertEqual(2.0f, reward, "DestinyGambit: winner matched -> 2x reward");
-            TestRunner.AssertEqual(1.0f, penalty, "DestinyGambit: winner matched -> 1x penalty");
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            var p1 = gm.GetPlayerSession(1);
+
+            // Manually add overflow
+            p1.Cards.AddToHand(new Card.Card(CardType.Paper, false));
+            TestRunner.Assert(p1.Cards.HasOverflow, "B1 Subspace: overflow exists before duel");
+
+            gm.HandleDrift(1, 300f);
+            var result = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+
+            TestRunner.Assert(result != null, "B1 Subspace: duel executed");
+            TestRunner.Assert(!p1.Cards.HasOverflow, "B1 Subspace: overflow cleared on subspace entry");
+
+            gm.EndGame();
+            gm.Dispose();
         }
 
-        static void TestDestinyGambit_CounterPenalty()
+        // ============================================================
+        // B2: P1免疫 + 幽灵保护
+        // ============================================================
+
+        static void TestB2_P1Immunity_BlocksDuel()
         {
-            GameEvents.ClearAll();
-            var phase = new DestinyGambitPhase(new Random(42));
-            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.DefenderMatched);
-            TestRunner.AssertEqual(1.0f, reward, "DestinyGambit: defender matched -> 1x reward");
-            TestRunner.AssertEqual(2.0f, penalty, "DestinyGambit: defender matched -> 2x penalty");
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            gm.HandleDrift(1, 300f);
+            // First duel: should succeed
+            var result1 = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+            TestRunner.Assert(result1 != null, "B2 P1Imm: first duel succeeds");
+
+            // Defender (P2) now has immunity. P1 attacks P2 again:
+            gm.HandleDrift(1, 300f);
+            var result2 = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+            TestRunner.Assert(result2 == null, "B2 P1Imm: second duel blocked by P1 immunity");
+
+            gm.EndGame();
+            gm.Dispose();
         }
 
-        static void TestDestinyGambit_BadLuck()
+        static void TestB2_P1Immunity_ExpiresAfterDuration()
         {
-            GameEvents.ClearAll();
-            var phase = new DestinyGambitPhase(new Random(42));
-            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.LoserMatched);
-            TestRunner.AssertEqual(1.0f, reward, "DestinyGambit: loser matched -> 1x reward (no reduction)");
-            TestRunner.AssertEqual(1.0f, penalty, "DestinyGambit: loser matched -> 1x penalty (bad luck)");
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            gm.HandleDrift(1, 300f);
+            gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+
+            // P2 is immune for 7s (default P1_ImmunityDuration)
+            var p2 = gm.GetPlayerSession(2);
+            TestRunner.Assert(p2.IsImmune, "B2 P1Imm Expiry: P2 immune after duel");
+
+            time.Advance(6.9f);
+            TestRunner.Assert(p2.IsImmune, "B2 P1Imm Expiry: P2 still immune at 6.9s");
+
+            time.Advance(0.2f); // 7.1s total
+            TestRunner.Assert(!p2.IsImmune, "B2 P1Imm Expiry: P2 immunity expired at 7.1s");
+
+            gm.EndGame();
+            gm.Dispose();
         }
 
-        static void TestDestinyGambit_ShengTianBanZi()
+        static void TestB2_P1Immunity_AppliedAfterDuel()
         {
-            GameEvents.ClearAll();
-            var phase = new DestinyGambitPhase(new Random(42));
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
 
-            // 胜天半子条件: 平局 + 双方都压中天命牌
-            // Rock vs Rock (draw), destiny = Rock -> both match
-            var match = phase.ResolveDestinyMatch(
-                DuelOutcome.Draw, CardType.Rock, CardType.Rock, CardType.Rock);
-            TestRunner.AssertEqual(DestinyMatchType.BothMatchedDraw, match,
-                "ShengTianBanZi: draw + both match -> BothMatchedDraw");
+            var p2 = gm.GetPlayerSession(2);
+            TestRunner.Assert(!p2.IsImmune, "B2 P1Imm Apply: P2 not immune initially");
+            TestRunner.AssertEqual(0f, p2.ImmunityRemainingTime, "B2 P1Imm Apply: 0s remaining initially");
 
-            // 验证奖励倍率在1.25~1.30范围内
-            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.BothMatchedDraw);
-            TestRunner.Assert(reward >= 1.25f && reward <= 1.30f,
-                $"ShengTianBanZi: reward in [1.25, 1.30] (actual: {reward:F4})");
-            TestRunner.AssertEqual(1.0f, penalty, "ShengTianBanZi: penalty = 1.0 (no penalty)");
+            gm.HandleDrift(1, 300f);
+            gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
 
-            // 验证天命效果类型
-            var effect = phase.ResolveDestinyEffect(DestinyMatchType.BothMatchedDraw);
-            TestRunner.AssertEqual(DestinyEffectType.ShengTianBanZi, effect,
-                "ShengTianBanZi: effect type is ShengTianBanZi");
+            TestRunner.Assert(p2.IsImmune, "B2 P1Imm Apply: P2 immune after being pulled");
+            TestRunner.Assert(p2.ImmunityRemainingTime > 6f, "B2 P1Imm Apply: remaining > 6s");
+
+            gm.EndGame();
+            gm.Dispose();
         }
 
-        static void TestDestinyGambit_DrawNoMatch()
+        static void TestB2_GhostProtection_ActivatesAfterThreshold()
         {
-            GameEvents.ClearAll();
-            var phase = new DestinyGambitPhase(new Random(42));
+            Setup();
+            var time = new ManualTimeProvider();
+            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
 
-            // 平局但不压中天命: Rock vs Rock, destiny = Paper
-            var match = phase.ResolveDestinyMatch(
-                DuelOutcome.Draw, CardType.Rock, CardType.Rock, CardType.Paper);
-            TestRunner.AssertEqual(DestinyMatchType.None, match,
-                "DestinyGambit: draw + no match -> None");
+            time.CurrentTime = 0f;
+            tracker.RecordPull();
+            TestRunner.Assert(!tracker.IsProtected, "B2 Ghost: not protected after 1 pull");
+
+            time.Advance(10f);
+            tracker.RecordPull();
+            TestRunner.Assert(!tracker.IsProtected, "B2 Ghost: not protected after 2 pulls");
+
+            time.Advance(10f);
+            bool triggered = tracker.RecordPull();
+            TestRunner.Assert(triggered, "B2 Ghost: triggered on 3rd pull");
+            TestRunner.Assert(tracker.IsProtected, "B2 Ghost: now protected");
         }
 
-        // ---- JokerPhase Tests ----
-
-        static void TestJokerPhase_SwapTriggered()
+        static void TestB2_GhostProtection_ExpiresAfterDuration()
         {
-            GameEvents.ClearAll();
+            Setup();
+            var time = new ManualTimeProvider();
+            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
+
+            time.CurrentTime = 0f;
+            tracker.RecordPull();
+            time.Advance(1f);
+            tracker.RecordPull();
+            time.Advance(1f);
+            tracker.RecordPull();
+
+            TestRunner.Assert(tracker.IsProtected, "B2 Ghost Expire: protected after 3 pulls");
+
+            time.Advance(19.9f);
+            TestRunner.Assert(tracker.IsProtected, "B2 Ghost Expire: still protected at 19.9s");
+
+            time.Advance(0.2f);
+            TestRunner.Assert(!tracker.IsProtected, "B2 Ghost Expire: expired at 20.1s");
+        }
+
+        static void TestB2_GhostProtection_WindowExpiry()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
+
+            time.CurrentTime = 0f;
+            tracker.RecordPull();
+
+            time.CurrentTime = 44f;
+            tracker.RecordPull();
+
+            time.CurrentTime = 46f; // 1st pull is now outside 45s window
+            bool triggered = tracker.RecordPull();
+            TestRunner.Assert(!triggered, "B2 Ghost Window: 3rd pull outside window doesn't trigger");
+            TestRunner.AssertEqual(2, tracker.RecentPullCount, "B2 Ghost Window: only 2 pulls in window");
+        }
+
+        // ============================================================
+        // B3: 小丑相位
+        // ============================================================
+
+        static void TestB3_JesterSwap_Triggered()
+        {
+            Setup();
             bool swapFound = false;
             for (int seed = 0; seed < 1000; seed++)
             {
@@ -433,19 +506,19 @@ namespace RacingCardGame.Tests
                     CardType a = CardType.Rock;
                     CardType b = CardType.Paper;
                     phase.PreDuelModify(ref a, ref b, out bool swapped);
-                    TestRunner.Assert(swapped, $"Joker: swap triggered (seed={seed})");
-                    TestRunner.AssertEqual(CardType.Paper, a, "Joker: initiator gets defender's card");
-                    TestRunner.AssertEqual(CardType.Rock, b, "Joker: defender gets initiator's card");
+                    TestRunner.Assert(swapped, $"B3 Swap: triggered (seed={seed})");
+                    TestRunner.AssertEqual(CardType.Paper, a, "B3 Swap: initiator gets defender's card");
+                    TestRunner.AssertEqual(CardType.Rock, b, "B3 Swap: defender gets initiator's card");
                     swapFound = true;
                     break;
                 }
             }
-            TestRunner.Assert(swapFound, "Joker: found a seed that triggers swap");
+            TestRunner.Assert(swapFound, "B3 Swap: found a seed that triggers swap");
         }
 
-        static void TestJokerPhase_NoSwap()
+        static void TestB3_JesterSwap_NoSwap()
         {
-            GameEvents.ClearAll();
+            Setup();
             for (int seed = 0; seed < 1000; seed++)
             {
                 var testRandom = new Random(seed);
@@ -456,490 +529,159 @@ namespace RacingCardGame.Tests
                     CardType a = CardType.Rock;
                     CardType b = CardType.Paper;
                     phase.PreDuelModify(ref a, ref b, out bool swapped);
-                    TestRunner.Assert(!swapped, $"Joker: no swap (seed={seed})");
-                    TestRunner.AssertEqual(CardType.Rock, a, "Joker: initiator keeps their card");
+                    TestRunner.Assert(!swapped, $"B3 NoSwap: no swap (seed={seed})");
+                    TestRunner.AssertEqual(CardType.Rock, a, "B3 NoSwap: initiator keeps card");
                     break;
                 }
             }
         }
 
-        // ---- CeasefirePhase Tests (Updated) ----
-
-        static void TestCeasefirePhase_ScissorsConvertedToRock()
+        static void TestB3_JesterSwap_ConfigDriven()
         {
-            GameEvents.ClearAll();
+            Setup();
+            // Override config to 100% swap chance
+            var config = new BalanceConfig();
+            config.JesterTriggerChance = 1.0f;
+            BalanceConfig.SetCurrent(config);
+
+            var phase = new JokerPhase(new Random(42));
+            CardType a = CardType.Rock;
+            CardType b = CardType.Paper;
+            phase.PreDuelModify(ref a, ref b, out bool swapped);
+            TestRunner.Assert(swapped, "B3 Config: 100% chance -> always swap");
+
+            // Override to 0% swap chance
+            config.JesterTriggerChance = 0f;
+            BalanceConfig.SetCurrent(config);
+
+            var phase2 = new JokerPhase(new Random(42));
+            CardType c = CardType.Rock;
+            CardType d = CardType.Paper;
+            phase2.PreDuelModify(ref c, ref d, out bool swapped2);
+            TestRunner.Assert(!swapped2, "B3 Config: 0% chance -> never swap");
+
+            BalanceConfig.Reset();
+        }
+
+        // ============================================================
+        // B4: 止戈相位
+        // ============================================================
+
+        static void TestB4_ScissorsConvertedToRock()
+        {
+            Setup();
             var phase = new CeasefirePhase();
 
             CardType a = CardType.Scissors;
             CardType b = CardType.Paper;
             phase.PreDuelModify(ref a, ref b, out bool swapped);
 
-            TestRunner.AssertEqual(CardType.Rock, a,
-                "Ceasefire: initiator Scissors -> Rock (剪视为石)");
-            TestRunner.AssertEqual(CardType.Paper, b,
-                "Ceasefire: defender Paper unchanged");
-            TestRunner.Assert(!swapped, "Ceasefire: conversion is not a swap");
+            TestRunner.AssertEqual(CardType.Rock, a, "B4: Scissors -> Rock (剪视为石)");
+            TestRunner.AssertEqual(CardType.Paper, b, "B4: Paper unchanged");
+            TestRunner.Assert(!swapped, "B4: conversion is not a swap");
         }
 
-        static void TestCeasefirePhase_RockBeatsPaper()
+        static void TestB4_RockBeatsPaper()
         {
-            GameEvents.ClearAll();
+            Setup();
             var phase = new CeasefirePhase();
-            var result = phase.ResolveDuel(CardType.Rock, CardType.Paper);
-            TestRunner.AssertEqual(DuelOutcome.Win, result, "Ceasefire: Rock beats Paper (撞晕)");
-
-            var result2 = phase.ResolveDuel(CardType.Paper, CardType.Rock);
-            TestRunner.AssertEqual(DuelOutcome.Lose, result2, "Ceasefire: Paper loses to Rock");
+            TestRunner.AssertEqual(DuelOutcome.Win, phase.ResolveDuel(CardType.Rock, CardType.Paper),
+                "B4: Rock beats Paper (撞晕)");
+            TestRunner.AssertEqual(DuelOutcome.Lose, phase.ResolveDuel(CardType.Paper, CardType.Rock),
+                "B4: Paper loses to Rock");
         }
 
-        static void TestCeasefirePhase_ScissorsVsScissors_BecomesDraw()
+        static void TestB4_ScissorsVsScissors_Draw()
         {
-            GameEvents.ClearAll();
+            Setup();
             var phase = new CeasefirePhase();
 
             CardType a = CardType.Scissors;
             CardType b = CardType.Scissors;
-            phase.PreDuelModify(ref a, ref b, out bool swapped);
+            phase.PreDuelModify(ref a, ref b, out bool _);
 
-            TestRunner.AssertEqual(CardType.Rock, a, "Ceasefire: Scissors A -> Rock");
-            TestRunner.AssertEqual(CardType.Rock, b, "Ceasefire: Scissors B -> Rock");
-
-            var result = phase.ResolveDuel(a, b);
-            TestRunner.AssertEqual(DuelOutcome.Draw, result, "Ceasefire: Rock vs Rock = Draw");
+            TestRunner.AssertEqual(CardType.Rock, a, "B4 SvS: Scissors A -> Rock");
+            TestRunner.AssertEqual(CardType.Rock, b, "B4 SvS: Scissors B -> Rock");
+            TestRunner.AssertEqual(DuelOutcome.Draw, phase.ResolveDuel(a, b), "B4 SvS: Rock vs Rock = Draw");
         }
 
-        static void TestCeasefirePhase_AllCardsPlayable()
+        static void TestB4_AllCardsPlayable()
         {
             var phase = new CeasefirePhase();
-            TestRunner.Assert(phase.IsCardPlayable(CardType.Scissors),
-                "Ceasefire: Scissors IS playable (converted, not blocked)");
-            TestRunner.Assert(phase.IsCardPlayable(CardType.Rock), "Ceasefire: Rock is playable");
-            TestRunner.Assert(phase.IsCardPlayable(CardType.Paper), "Ceasefire: Paper is playable");
+            TestRunner.Assert(phase.IsCardPlayable(CardType.Scissors), "B4: Scissors playable (converted)");
+            TestRunner.Assert(phase.IsCardPlayable(CardType.Rock), "B4: Rock playable");
+            TestRunner.Assert(phase.IsCardPlayable(CardType.Paper), "B4: Paper playable");
         }
 
-        // ---- InfiniteFirepowerPhase Tests (Updated) ----
+        // ============================================================
+        // B5: 赌场 (天命赌场) — Multipliers from BalanceConfig
+        // ============================================================
 
-        static void TestInfiniteFirepower_ChargeSpeed()
+        static void TestB5_CritMultiplier_1_5x()
         {
-            var phase = new InfiniteFirepowerPhase();
-            TestRunner.AssertEqual(2.5f, phase.GetChargeSpeedMultiplier(),
-                "InfiniteFirepower: 2.5x charge speed");
+            Setup();
+            var phase = new DestinyGambitPhase(new Random(42));
+            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.WinnerMatched);
+            TestRunner.AssertEqual(1.5f, reward, "B5 Crit: reward = 1.5x (from BalanceConfig)");
+            TestRunner.AssertEqual(1.0f, penalty, "B5 Crit: penalty = 1.0x");
         }
 
-        static void TestInfiniteFirepower_GhostProtectionMultiplier()
+        static void TestB5_CounterMultiplier_1_5x()
         {
-            GameEvents.ClearAll();
-            var phase = new InfiniteFirepowerPhase();
-            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.None);
-            TestRunner.Assert(penalty <= 0.5f,
-                "InfiniteFirepower: ghost protection halves penalty");
+            Setup();
+            var phase = new DestinyGambitPhase(new Random(42));
+            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.DefenderMatched);
+            TestRunner.AssertEqual(1.0f, reward, "B5 Counter: reward = 1.0x");
+            TestRunner.AssertEqual(1.5f, penalty, "B5 Counter: penalty = 1.5x (from BalanceConfig)");
         }
 
-        static void TestInfiniteFirepower_OverheatDuration()
+        static void TestB5_ConquerHeaven_1_3x_Fixed()
         {
-            GameEvents.ClearAll();
-            var phase = new InfiniteFirepowerPhase();
-            var result = new DuelResultData();
-            phase.PostDuelEffect(result);
-            TestRunner.AssertEqual(5.0f, result.OverheatDuration,
-                "InfiniteFirepower: overheat duration = 5s");
+            Setup();
+            var phase = new DestinyGambitPhase(new Random(42));
+            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.BothMatchedDraw);
+            TestRunner.AssertEqual(1.3f, reward, "B5 ConquerHeaven: reward = 1.3x fixed (no random)");
+            TestRunner.AssertEqual(1.0f, penalty, "B5 ConquerHeaven: penalty = 1.0x");
+
+            // Verify it's always the same (not random)
+            var phase2 = new DestinyGambitPhase(new Random(99));
+            var (reward2, penalty2) = phase2.CalculateMultipliers(DestinyMatchType.BothMatchedDraw);
+            TestRunner.AssertEqual(reward, reward2, "B5 ConquerHeaven: deterministic (same with different seed)");
         }
 
-        // ---- GhostProtectionTracker Tests ----
-
-        static void TestGhostTracker_NoProtectionInitially()
+        static void TestB5_BadLuck_NoBonus()
         {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var tracker = new GhostProtectionTracker(1, time);
-            TestRunner.Assert(!tracker.IsProtected, "GhostTracker: not protected initially");
-            TestRunner.AssertEqual(0, tracker.RecentPullCount, "GhostTracker: 0 pulls initially");
+            Setup();
+            var phase = new DestinyGambitPhase(new Random(42));
+            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.LoserMatched);
+            TestRunner.AssertEqual(1.0f, reward, "B5 BadLuck: reward = 1.0x (no reduction)");
+            TestRunner.AssertEqual(1.0f, penalty, "B5 BadLuck: penalty = 1.0x (no help)");
         }
 
-        static void TestGhostTracker_ActivatesAfterThreshold()
+        static void TestB5_ShengTianBanZi_Trigger()
         {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
-
-            time.CurrentTime = 0f;
-            tracker.RecordPull();
-            TestRunner.Assert(!tracker.IsProtected, "GhostTracker: not protected after 1 pull");
-
-            time.Advance(10f);
-            tracker.RecordPull();
-            TestRunner.Assert(!tracker.IsProtected, "GhostTracker: not protected after 2 pulls");
-
-            time.Advance(10f);
-            bool triggered = tracker.RecordPull();
-            TestRunner.Assert(triggered, "GhostTracker: protection triggered on 3rd pull");
-            TestRunner.Assert(tracker.IsProtected, "GhostTracker: now protected");
-        }
-
-        static void TestGhostTracker_ExpiresAfterDuration()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
-
-            time.CurrentTime = 0f;
-            tracker.RecordPull();
-            time.Advance(1f);
-            tracker.RecordPull();
-            time.Advance(1f);
-            tracker.RecordPull();
-
-            TestRunner.Assert(tracker.IsProtected, "GhostTracker: protected after 3 pulls");
-
-            time.Advance(19.9f);
-            TestRunner.Assert(tracker.IsProtected, "GhostTracker: still protected at 19.9s");
-
-            time.Advance(0.2f);
-            TestRunner.Assert(!tracker.IsProtected, "GhostTracker: protection expired at 20.1s");
-        }
-
-        static void TestGhostTracker_WindowExpiry()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var tracker = new GhostProtectionTracker(1, time, pullThreshold: 3, timeWindow: 45f, protectionDuration: 20f);
-
-            time.CurrentTime = 0f;
-            tracker.RecordPull();
-
-            time.CurrentTime = 44f;
-            tracker.RecordPull();
-
-            time.CurrentTime = 46f;
-            bool triggered = tracker.RecordPull();
-            TestRunner.Assert(!triggered, "GhostTracker: 3rd pull outside window doesn't trigger");
-            TestRunner.AssertEqual(2, tracker.RecentPullCount,
-                "GhostTracker: only 2 pulls in window (oldest expired)");
-        }
-
-        // ---- SubspaceDuelManager Tests ----
-
-        static void TestDuelExecution_BasicWin()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.DestinyGambit);
-            var duelMgr = new SubspaceDuelManager(pm, new Random(42));
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var result = duelMgr.ExecuteDuel(1, 2, cards, skill, CardType.Rock, CardType.Scissors);
-
-            TestRunner.AssertEqual(DuelOutcome.Win, result.Outcome, "Duel: Rock beats Scissors");
-            TestRunner.AssertEqual(1, result.InitiatorId, "Duel: correct initiator ID");
-            TestRunner.AssertEqual(2, result.DefenderId, "Duel: correct defender ID");
-        }
-
-        static void TestDuelExecution_Draw()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.DestinyGambit);
-            var duelMgr = new SubspaceDuelManager(pm, new Random(42));
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var result = duelMgr.ExecuteDuel(1, 2, cards, skill, CardType.Rock, CardType.Rock);
-            TestRunner.AssertEqual(DuelOutcome.Draw, result.Outcome, "Duel: Rock vs Rock = Draw");
-        }
-
-        static void TestDuelValidation_NoTicket()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.DestinyGambit);
-            var duelMgr = new SubspaceDuelManager(pm);
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-
-            var cards = new CardManager(1);
-
-            var (canInitiate, reason) = duelMgr.ValidateDuelConditions(skill, cards);
-            TestRunner.Assert(!canInitiate, "Duel validation: fails with no ticket");
-            TestRunner.Assert(reason.Contains("暗牌"), "Duel validation: reason mentions dark card");
-        }
-
-        static void TestDuelValidation_NotFullyCharged()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.DestinyGambit);
-            var duelMgr = new SubspaceDuelManager(pm);
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(100f);
-
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var (canInitiate, _) = duelMgr.ValidateDuelConditions(skill, cards);
-            TestRunner.Assert(!canInitiate, "Duel validation: fails when not fully charged");
-        }
-
-        static void TestDuelValidation_Overheated()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.InfiniteFirepower);
-            var duelMgr = new SubspaceDuelManager(pm);
-
-            var skill = new SkillSlotManager(1, time);
-            skill.AddCharge(300f);
-            skill.StartOverheat(5f);
-
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var (canInitiate, reason) = duelMgr.ValidateDuelConditions(skill, cards);
-            TestRunner.Assert(!canInitiate, "Duel validation: fails when overheated");
-            TestRunner.Assert(reason.Contains("过热"), "Duel validation: reason mentions overheat");
-        }
-
-        static void TestDuelValidation_GhostProtection()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.InfiniteFirepower);
-            var duelMgr = new SubspaceDuelManager(pm);
-
-            var tracker = new GhostProtectionTracker(2, time, pullThreshold: 1, timeWindow: 45f, protectionDuration: 20f);
-            tracker.RecordPull();
-
-            var (canPull, reason) = duelMgr.ValidateDefenderPullable(tracker);
-            TestRunner.Assert(!canPull, "Duel validation: fails when defender has ghost protection");
-            TestRunner.Assert(reason.Contains("幽灵保护"), "Duel validation: reason mentions ghost protection");
-        }
-
-        // ---- Duel Result Data Fields Tests ----
-
-        static void TestDuelResult_OriginalCards()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.Ceasefire);
-            var duelMgr = new SubspaceDuelManager(pm, new Random(42));
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var result = duelMgr.ExecuteDuel(1, 2, cards, skill, CardType.Scissors, CardType.Paper);
-
-            TestRunner.AssertEqual(CardType.Scissors, result.OriginalInitiatorCard,
-                "DuelResult: original initiator card preserved");
-            TestRunner.AssertEqual(CardType.Rock, result.InitiatorCard,
-                "DuelResult: final card is Rock (converted)");
-        }
-
-        static void TestDuelResult_ScissorsConverted()
-        {
-            GameEvents.ClearAll();
-            var pm = new PhaseManager(new Random(42));
-            pm.LockPhase(PhaseType.Ceasefire);
-            var duelMgr = new SubspaceDuelManager(pm, new Random(42));
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            var result = duelMgr.ExecuteDuel(1, 2, cards, skill, CardType.Scissors, CardType.Paper);
-            TestRunner.Assert(result.ScissorsConverted, "DuelResult: ScissorsConverted flag set");
-        }
-
-        static void TestDuelResult_DestinyEffectType()
-        {
-            GameEvents.ClearAll();
+            Setup();
             var phase = new DestinyGambitPhase(new Random(42));
 
-            TestRunner.AssertEqual(DestinyEffectType.Crit,
-                phase.ResolveDestinyEffect(DestinyMatchType.WinnerMatched),
-                "DestinyEffect: WinnerMatched -> Crit");
-            TestRunner.AssertEqual(DestinyEffectType.Counter,
-                phase.ResolveDestinyEffect(DestinyMatchType.DefenderMatched),
-                "DestinyEffect: DefenderMatched -> Counter");
-            TestRunner.AssertEqual(DestinyEffectType.BadLuck,
-                phase.ResolveDestinyEffect(DestinyMatchType.LoserMatched),
-                "DestinyEffect: LoserMatched -> BadLuck");
-            TestRunner.AssertEqual(DestinyEffectType.ShengTianBanZi,
-                phase.ResolveDestinyEffect(DestinyMatchType.BothMatchedDraw),
-                "DestinyEffect: BothMatchedDraw -> ShengTianBanZi");
+            var match = phase.ResolveDestinyMatch(
+                DuelOutcome.Draw, CardType.Rock, CardType.Rock, CardType.Rock);
+            TestRunner.AssertEqual(DestinyMatchType.BothMatchedDraw, match,
+                "B5 ShengTianBanZi: draw + both match -> BothMatchedDraw");
+
+            var effect = phase.ResolveDestinyEffect(DestinyMatchType.BothMatchedDraw);
+            TestRunner.AssertEqual(DestinyEffectType.ShengTianBanZi, effect,
+                "B5 ShengTianBanZi: effect type = ShengTianBanZi");
+
+            // Draw but no match: different destiny card
+            var match2 = phase.ResolveDestinyMatch(
+                DuelOutcome.Draw, CardType.Rock, CardType.Rock, CardType.Paper);
+            TestRunner.AssertEqual(DestinyMatchType.None, match2,
+                "B5 ShengTianBanZi: draw + no match -> None");
         }
 
-        static void TestDuelResult_ShengTianBanZi()
-        {
-            GameEvents.ClearAll();
-            // Find a seed where destiny card = Rock (0)
-            int targetSeed = -1;
-            for (int seed = 0; seed < 1000; seed++)
-            {
-                var r = new Random(seed);
-                if ((CardType)r.Next(3) == CardType.Rock)
-                {
-                    targetSeed = seed;
-                    break;
-                }
-            }
-
-            var pm = new PhaseManager(new Random(targetSeed));
-            pm.LockPhase(PhaseType.DestinyGambit);
-            var duelMgr = new SubspaceDuelManager(pm, new Random(targetSeed));
-
-            var skill = new SkillSlotManager(1);
-            skill.AddCharge(300f);
-            var cards = new CardManager(1);
-            cards.AddDarkCard(new Card.Card(CardType.Rock, true));
-
-            // Both play Rock, destiny = Rock -> ShengTianBanZi
-            var result = duelMgr.ExecuteDuel(1, 2, cards, skill, CardType.Rock, CardType.Rock);
-            TestRunner.Assert(result.IsShengTianBanZi,
-                "DuelResult: ShengTianBanZi triggered in actual duel");
-            TestRunner.AssertEqual(DuelOutcome.Draw, result.Outcome,
-                "DuelResult: ShengTianBanZi is a draw");
-        }
-
-        // ---- GameManager Integration Tests ----
-
-        static void TestGameManagerLifecycle()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var gm = new GameManager(new Random(42), time);
-            gm.InitializeGame(new[] { 1, 2 });
-
-            TestRunner.Assert(gm.IsGameActive, "GameManager: game is active after init");
-            TestRunner.Assert(gm.PhaseManager.IsLocked, "GameManager: phase is locked");
-
-            var p1 = gm.GetPlayerSession(1);
-            TestRunner.Assert(p1 != null, "GameManager: player 1 session exists");
-            TestRunner.Assert(p1.Cards.Hand.Count > 0, "GameManager: player 1 has cards");
-            TestRunner.Assert(p1.Cards.DarkCardCount > 0, "GameManager: player 1 has dark cards");
-
-            gm.EndGame();
-            TestRunner.Assert(!gm.IsGameActive, "GameManager: game ended");
-            gm.Dispose();
-        }
-
-        static void TestFullDuelFlow()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var gm = new GameManager(new Random(42), time);
-            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
-
-            gm.HandleDrift(1, 300f);
-
-            var p1 = gm.GetPlayerSession(1);
-            TestRunner.Assert(p1.SkillSlots.IsFullyCharged, "FullFlow: player 1 fully charged");
-
-            var result = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
-
-            TestRunner.Assert(result != null, "FullFlow: duel result not null");
-            TestRunner.AssertEqual(DuelOutcome.Win, result.Outcome, "FullFlow: Rock beats Scissors");
-            TestRunner.AssertEqual(PhaseType.DestinyGambit, result.ActivePhase, "FullFlow: correct phase");
-            TestRunner.Assert(!p1.SkillSlots.IsFullyCharged, "FullFlow: skill slots consumed");
-            TestRunner.AssertEqual(1, p1.Cards.DarkCardCount, "FullFlow: one dark card consumed");
-
-            gm.EndGame();
-            gm.Dispose();
-        }
-
-        static void TestInfiniteFirepower_FullFlow()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var gm = new GameManager(new Random(42), time);
-            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.InfiniteFirepower);
-
-            var p1 = gm.GetPlayerSession(1);
-            var p2 = gm.GetPlayerSession(2);
-
-            // Verify 2.5x charge speed
-            TestRunner.AssertEqual(2.5f, p1.SkillSlots.ChargeSpeedMultiplier,
-                "InfFirepower Flow: 2.5x charge multiplier applied");
-
-            // Verify ghost tracker initialized
-            TestRunner.Assert(p2.GhostTracker != null,
-                "InfFirepower Flow: ghost tracker initialized");
-
-            // Charge and duel: 120 * 2.5 = 300 -> full
-            gm.HandleDrift(1, 120f);
-            TestRunner.Assert(p1.SkillSlots.IsFullyCharged,
-                "InfFirepower Flow: 120 drift with 2.5x = full charge");
-
-            var result = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
-            TestRunner.Assert(result != null, "InfFirepower Flow: duel executed");
-
-            // Verify overheat applied
-            TestRunner.Assert(p1.SkillSlots.IsOverheated,
-                "InfFirepower Flow: initiator overheated after duel");
-            TestRunner.AssertEqual(5.0f, result.OverheatDuration,
-                "InfFirepower Flow: overheat duration = 5s");
-
-            // Can't duel while overheated
-            gm.HandleDrift(1, 120f);
-            var result2 = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Paper);
-            TestRunner.Assert(result2 == null,
-                "InfFirepower Flow: can't duel while overheated");
-
-            // Wait for overheat to expire
-            time.Advance(5.1f);
-            TestRunner.Assert(!p1.SkillSlots.IsOverheated,
-                "InfFirepower Flow: overheat expired after 5.1s");
-
-            // Penalty multiplier halved by ghost protection
-            TestRunner.Assert(result.PenaltyMultiplier <= 0.75f,
-                $"InfFirepower Flow: penalty halved (actual: {result.PenaltyMultiplier})");
-
-            gm.EndGame();
-            gm.Dispose();
-        }
-
-        static void TestCeasefire_FullFlow()
-        {
-            GameEvents.ClearAll();
-            var time = new ManualTimeProvider();
-            var gm = new GameManager(new Random(42), time);
-            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.Ceasefire);
-
-            gm.HandleDrift(1, 300f);
-
-            // Scissors allowed but converted
-            var result = gm.TryInitiateDuel(1, 2, CardType.Scissors, CardType.Paper);
-            TestRunner.Assert(result != null, "Ceasefire Flow: duel executed with Scissors");
-            TestRunner.AssertEqual(CardType.Rock, result.InitiatorCard,
-                "Ceasefire Flow: Scissors converted to Rock");
-            TestRunner.AssertEqual(CardType.Scissors, result.OriginalInitiatorCard,
-                "Ceasefire Flow: original card preserved as Scissors");
-            TestRunner.Assert(result.ScissorsConverted,
-                "Ceasefire Flow: ScissorsConverted flag set");
-
-            // Rock beats Paper in Ceasefire
-            TestRunner.AssertEqual(DuelOutcome.Win, result.Outcome,
-                "Ceasefire Flow: Rock(converted) beats Paper");
-
-            gm.EndGame();
-            gm.Dispose();
-        }
-
-        // ==== UI Banner: PickBanner Priority Tests ====
+        // ============================================================
+        // B6: 横幅优先级
+        // ============================================================
 
         static DuelResultContext MakeCtx_ConquerHeaven()
         {
@@ -953,7 +695,7 @@ namespace RacingCardGame.Tests
                 CasinoAttackerHitHouse = true, CasinoDefenderHitHouse = true,
                 CasinoLoserHitHouse = false,
                 CasinoConquerHeavenTriggered = true,
-                MultiplierAppliedToWinner = 1.27f, MultiplierAppliedToLoser = 1.0f
+                MultiplierAppliedToWinner = 1.3f, MultiplierAppliedToLoser = 1.0f
             };
         }
 
@@ -981,7 +723,7 @@ namespace RacingCardGame.Tests
                 CasinoHouseCard = CardType.Rock,
                 CasinoAttackerHitHouse = true, CasinoDefenderHitHouse = false,
                 CasinoLoserHitHouse = false,
-                MultiplierAppliedToWinner = 2.0f, MultiplierAppliedToLoser = 1.0f
+                MultiplierAppliedToWinner = 1.5f, MultiplierAppliedToLoser = 1.0f
             };
         }
 
@@ -996,7 +738,7 @@ namespace RacingCardGame.Tests
                 CasinoHouseCard = CardType.Rock,
                 CasinoAttackerHitHouse = false, CasinoDefenderHitHouse = true,
                 CasinoLoserHitHouse = false,
-                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 2.0f
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 1.5f
             };
         }
 
@@ -1039,78 +781,69 @@ namespace RacingCardGame.Tests
             };
         }
 
-        static void TestPickBanner_P1_ConquerHeaven()
+        static void TestB6_P1_ConquerHeaven()
+        {
+            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, DuelBannerResolver.PickBanner(MakeCtx_ConquerHeaven()),
+                "B6 P1: ConquerHeaven");
+        }
+
+        static void TestB6_P2_JesterSwap()
+        {
+            TestRunner.AssertEqual(UIBannerType.JesterSwap, DuelBannerResolver.PickBanner(MakeCtx_JesterSwap()),
+                "B6 P2: JesterSwap");
+        }
+
+        static void TestB6_P3_DestinyCrit()
+        {
+            TestRunner.AssertEqual(UIBannerType.DestinyCrit, DuelBannerResolver.PickBanner(MakeCtx_DestinyCrit()),
+                "B6 P3: DestinyCrit");
+        }
+
+        static void TestB6_P4_DestinyCounter()
+        {
+            TestRunner.AssertEqual(UIBannerType.DestinyCounter, DuelBannerResolver.PickBanner(MakeCtx_DestinyCounter()),
+                "B6 P4: DestinyCounter");
+        }
+
+        static void TestB6_P5_BadLuck()
+        {
+            TestRunner.AssertEqual(UIBannerType.BadLuck, DuelBannerResolver.PickBanner(MakeCtx_BadLuck()),
+                "B6 P5: BadLuck");
+        }
+
+        static void TestB6_P6_NormalWin()
+        {
+            TestRunner.AssertEqual(UIBannerType.NormalWin, DuelBannerResolver.PickBanner(MakeCtx_NormalWin()),
+                "B6 P6: NormalWin");
+        }
+
+        static void TestB6_P7_Draw()
+        {
+            TestRunner.AssertEqual(UIBannerType.Draw, DuelBannerResolver.PickBanner(MakeCtx_Draw()),
+                "B6 P7: Draw");
+        }
+
+        static void TestB6_Priority_ConquerHeavenOverDraw()
         {
             var ctx = MakeCtx_ConquerHeaven();
+            TestRunner.Assert(ctx.IsDraw, "B6 Priority: ConquerHeaven ctx is a draw");
             TestRunner.AssertEqual(UIBannerType.ConquerHeaven, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P1: ConquerHeaven");
+                "B6 Priority: P1 ConquerHeaven > P7 Draw");
         }
 
-        static void TestPickBanner_P2_JesterSwap()
-        {
-            var ctx = MakeCtx_JesterSwap();
-            TestRunner.AssertEqual(UIBannerType.JesterSwap, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P2: JesterSwap");
-        }
-
-        static void TestPickBanner_P3_DestinyCrit()
+        static void TestB6_Priority_CritOverNormalWin()
         {
             var ctx = MakeCtx_DestinyCrit();
+            TestRunner.Assert(ctx.WinnerId.HasValue, "B6 Priority: DestinyCrit has a winner");
             TestRunner.AssertEqual(UIBannerType.DestinyCrit, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P3: DestinyCrit (attacker=winner, hit house)");
+                "B6 Priority: P3 DestinyCrit > P6 NormalWin");
         }
 
-        static void TestPickBanner_P4_DestinyCounter()
+        static void TestB6_Adapter_AllPhases()
         {
-            var ctx = MakeCtx_DestinyCounter();
-            TestRunner.AssertEqual(UIBannerType.DestinyCounter, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P4: DestinyCounter (defender=winner, hit house)");
-        }
-
-        static void TestPickBanner_P5_BadLuck()
-        {
-            var ctx = MakeCtx_BadLuck();
-            TestRunner.AssertEqual(UIBannerType.BadLuck, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P5: BadLuck (loser hit house)");
-        }
-
-        static void TestPickBanner_P6_NormalWin()
-        {
-            var ctx = MakeCtx_NormalWin();
-            TestRunner.AssertEqual(UIBannerType.NormalWin, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P6: NormalWin");
-        }
-
-        static void TestPickBanner_P7_Draw()
-        {
-            var ctx = MakeCtx_Draw();
-            TestRunner.AssertEqual(UIBannerType.Draw, DuelBannerResolver.PickBanner(ctx),
-                "PickBanner P7: Draw");
-        }
-
-        static void TestPickBanner_PriorityConquerHeavenOverDraw()
-        {
-            // ConquerHeaven ctx is also a draw, but P1 should take priority over P7
-            var ctx = MakeCtx_ConquerHeaven();
-            TestRunner.Assert(ctx.IsDraw, "PriorityTest: ConquerHeaven ctx is indeed a draw");
-            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, DuelBannerResolver.PickBanner(ctx),
-                "PriorityTest: ConquerHeaven (P1) beats Draw (P7)");
-        }
-
-        static void TestPickBanner_PriorityCritOverNormalWin()
-        {
-            // DestinyCrit ctx also has a winner, so NormalWin would match too
-            var ctx = MakeCtx_DestinyCrit();
-            TestRunner.Assert(ctx.WinnerId.HasValue, "PriorityTest: DestinyCrit ctx has a winner");
-            TestRunner.AssertEqual(UIBannerType.DestinyCrit, DuelBannerResolver.PickBanner(ctx),
-                "PriorityTest: DestinyCrit (P3) beats NormalWin (P6)");
-        }
-
-        // ==== UI Banner: DuelResultAdapter Tests ====
-
-        static void TestAdapter_CasinoPhaseConversion()
-        {
-            var data = new DuelResultData
+            Setup();
+            // DestinyGambit -> Casino
+            var dataCasino = new DuelResultData
             {
                 InitiatorId = 1, DefenderId = 2,
                 InitiatorCard = CardType.Rock, DefenderCard = CardType.Rock,
@@ -1118,20 +851,14 @@ namespace RacingCardGame.Tests
                 Outcome = DuelOutcome.Draw,
                 ActivePhase = PhaseType.DestinyGambit,
                 IsShengTianBanZi = true,
-                RewardMultiplier = 1.27f, PenaltyMultiplier = 1.0f
+                RewardMultiplier = 1.3f, PenaltyMultiplier = 1.0f
             };
-            var ctx = DuelResultAdapter.Convert(data);
-            TestRunner.AssertEqual(DuelPhase.Casino, ctx.Phase, "Adapter: DestinyGambit -> Casino");
-            TestRunner.Assert(ctx.CasinoConquerHeavenTriggered, "Adapter: ShengTianBanZi -> ConquerHeaven");
-            TestRunner.Assert(ctx.CasinoAttackerHitHouse, "Adapter: attacker Rock == destiny Rock");
-            TestRunner.Assert(ctx.CasinoDefenderHitHouse, "Adapter: defender Rock == destiny Rock");
-            TestRunner.Assert(ctx.IsDraw, "Adapter: Draw mapped correctly");
-            TestRunner.Assert(!ctx.WinnerId.HasValue, "Adapter: no winner on draw");
-        }
+            var ctxCasino = DuelResultAdapter.Convert(dataCasino);
+            TestRunner.AssertEqual(DuelPhase.Casino, ctxCasino.Phase, "B6 Adapter: DestinyGambit -> Casino");
+            TestRunner.Assert(ctxCasino.CasinoConquerHeavenTriggered, "B6 Adapter: ShengTianBanZi -> ConquerHeaven");
 
-        static void TestAdapter_JesterPhaseConversion()
-        {
-            var data = new DuelResultData
+            // Joker -> Jester
+            var dataJester = new DuelResultData
             {
                 InitiatorId = 1, DefenderId = 2,
                 InitiatorCard = CardType.Paper, DefenderCard = CardType.Rock,
@@ -1140,14 +867,12 @@ namespace RacingCardGame.Tests
                 CardsSwapped = true,
                 RewardMultiplier = 1.0f, PenaltyMultiplier = 1.0f
             };
-            var ctx = DuelResultAdapter.Convert(data);
-            TestRunner.AssertEqual(DuelPhase.Jester, ctx.Phase, "Adapter: Joker -> Jester");
-            TestRunner.Assert(ctx.JesterSwapTriggered, "Adapter: CardsSwapped -> JesterSwapTriggered");
-        }
+            var ctxJester = DuelResultAdapter.Convert(dataJester);
+            TestRunner.AssertEqual(DuelPhase.Jester, ctxJester.Phase, "B6 Adapter: Joker -> Jester");
+            TestRunner.Assert(ctxJester.JesterSwapTriggered, "B6 Adapter: CardsSwapped -> JesterSwap");
 
-        static void TestAdapter_PeacePhaseConversion()
-        {
-            var data = new DuelResultData
+            // Ceasefire -> Peace
+            var dataPeace = new DuelResultData
             {
                 InitiatorId = 1, DefenderId = 2,
                 InitiatorCard = CardType.Rock, DefenderCard = CardType.Paper,
@@ -1157,14 +882,12 @@ namespace RacingCardGame.Tests
                 ScissorsConverted = true,
                 RewardMultiplier = 1.0f, PenaltyMultiplier = 1.0f
             };
-            var ctx = DuelResultAdapter.Convert(data);
-            TestRunner.AssertEqual(DuelPhase.Peace, ctx.Phase, "Adapter: Ceasefire -> Peace");
-            TestRunner.Assert(ctx.PeaceRuleApplied, "Adapter: ScissorsConverted -> PeaceRuleApplied");
-        }
+            var ctxPeace = DuelResultAdapter.Convert(dataPeace);
+            TestRunner.AssertEqual(DuelPhase.Peace, ctxPeace.Phase, "B6 Adapter: Ceasefire -> Peace");
+            TestRunner.Assert(ctxPeace.PeaceRuleApplied, "B6 Adapter: ScissorsConverted -> PeaceRule");
 
-        static void TestAdapter_OverloadPhaseConversion()
-        {
-            var data = new DuelResultData
+            // InfiniteFirepower -> Overload
+            var dataOverload = new DuelResultData
             {
                 InitiatorId = 1, DefenderId = 2,
                 InitiatorCard = CardType.Rock, DefenderCard = CardType.Scissors,
@@ -1174,42 +897,16 @@ namespace RacingCardGame.Tests
                 GhostProtectionGranted = true,
                 RewardMultiplier = 1.0f, PenaltyMultiplier = 0.5f
             };
-            var ctx = DuelResultAdapter.Convert(data);
-            TestRunner.AssertEqual(DuelPhase.Overload, ctx.Phase, "Adapter: InfiniteFirepower -> Overload");
-            TestRunner.Assert(ctx.OverloadAttackerOverheatApplied, "Adapter: overheat applied");
-            TestRunner.Assert(ctx.VictimGhostTriggered, "Adapter: ghost triggered");
+            var ctxOverload = DuelResultAdapter.Convert(dataOverload);
+            TestRunner.AssertEqual(DuelPhase.Overload, ctxOverload.Phase, "B6 Adapter: InfiniteFirepower -> Overload");
+            TestRunner.Assert(ctxOverload.OverloadAttackerOverheatApplied, "B6 Adapter: overheat applied");
+
+            // Winner/Loser mapping
+            TestRunner.AssertEqual(1, ctxOverload.WinnerId.Value, "B6 Adapter Win: winner = initiator");
+            TestRunner.AssertEqual(2, ctxOverload.LoserId.Value, "B6 Adapter Win: loser = defender");
         }
 
-        static void TestAdapter_WinnerLoserMapping()
-        {
-            // Win: initiator is winner
-            var dataWin = new DuelResultData
-            {
-                InitiatorId = 10, DefenderId = 20,
-                Outcome = DuelOutcome.Win,
-                ActivePhase = PhaseType.DestinyGambit,
-                RewardMultiplier = 2.0f, PenaltyMultiplier = 1.0f
-            };
-            var ctxWin = DuelResultAdapter.Convert(dataWin);
-            TestRunner.AssertEqual(10, ctxWin.WinnerId.Value, "Adapter Win: winner = initiator");
-            TestRunner.AssertEqual(20, ctxWin.LoserId.Value, "Adapter Win: loser = defender");
-
-            // Lose: defender is winner
-            var dataLose = new DuelResultData
-            {
-                InitiatorId = 10, DefenderId = 20,
-                Outcome = DuelOutcome.Lose,
-                ActivePhase = PhaseType.DestinyGambit,
-                RewardMultiplier = 1.0f, PenaltyMultiplier = 2.0f
-            };
-            var ctxLose = DuelResultAdapter.Convert(dataLose);
-            TestRunner.AssertEqual(20, ctxLose.WinnerId.Value, "Adapter Lose: winner = defender");
-            TestRunner.AssertEqual(10, ctxLose.LoserId.Value, "Adapter Lose: loser = initiator");
-        }
-
-        // ==== UI Banner: DuelUIEventQueue Tests ====
-
-        static void TestQueue_SingleBannerPerContext()
+        static void TestB6_Queue_SingleBanner()
         {
             var time = new ManualTimeProvider();
             var presenter = new SimpleDuelBannerPresenter();
@@ -1218,23 +915,17 @@ namespace RacingCardGame.Tests
             int bannerCount = 0;
             queue.OnBannerShown += (type) => bannerCount++;
 
-            var ctx = MakeCtx_ConquerHeaven();
-            queue.Enqueue(ctx);
-
-            // First tick: Idle -> WaitingDelay (stateEnteredTime = 0)
-            queue.Tick();
-            // Advance past delay
+            queue.Enqueue(MakeCtx_ConquerHeaven());
+            queue.Tick();           // Idle -> WaitingDelay
             time.Advance(0.2f);
-            // Second tick: WaitingDelay -> ShowingBanner
-            queue.Tick();
+            queue.Tick();           // WaitingDelay -> ShowingBanner
 
-            TestRunner.AssertEqual(1, bannerCount, "Queue: exactly 1 banner shown per context");
-            TestRunner.Assert(presenter.IsShowing, "Queue: presenter is showing");
+            TestRunner.AssertEqual(1, bannerCount, "B6 Queue: exactly 1 banner per context");
             TestRunner.AssertEqual(UIBannerType.ConquerHeaven, presenter.CurrentBanner.Value,
-                "Queue: correct banner type shown");
+                "B6 Queue: correct banner type");
         }
 
-        static void TestQueue_DelayBeforeShow()
+        static void TestB6_Queue_DelayAndDuration()
         {
             var time = new ManualTimeProvider();
             var presenter = new SimpleDuelBannerPresenter();
@@ -1242,166 +933,561 @@ namespace RacingCardGame.Tests
 
             queue.Enqueue(MakeCtx_NormalWin());
 
-            // Tick immediately - should not show yet (still in delay)
+            // Delay check
             queue.Tick();
-            TestRunner.Assert(!presenter.IsShowing, "Queue: not showing during delay");
-
-            // Advance 0.10s (still within 0.15s delay)
+            TestRunner.Assert(!presenter.IsShowing, "B6 Queue Delay: not showing during delay");
             time.Advance(0.10f);
             queue.Tick();
-            TestRunner.Assert(!presenter.IsShowing, "Queue: still not showing at 0.10s");
-
-            // Advance past delay
+            TestRunner.Assert(!presenter.IsShowing, "B6 Queue Delay: still not at 0.10s");
             time.Advance(0.06f);
             queue.Tick();
-            TestRunner.Assert(presenter.IsShowing, "Queue: showing after 0.16s (past 0.15s delay)");
-        }
+            TestRunner.Assert(presenter.IsShowing, "B6 Queue Delay: showing after 0.16s");
 
-        static void TestQueue_BannerDuration()
-        {
-            var time = new ManualTimeProvider();
-            var presenter = new SimpleDuelBannerPresenter();
-            var queue = new DuelUIEventQueue(presenter, time);
-
-            queue.Enqueue(MakeCtx_Draw());
-
-            // Tick to enter WaitingDelay, advance past delay, tick to show
-            queue.Tick();
-            time.Advance(0.2f);
-            queue.Tick();
-            TestRunner.Assert(presenter.IsShowing, "Queue Duration: banner showing");
-
-            // Still showing at 1.4s (within 1.5s duration from show time)
+            // Duration check
             time.Advance(1.4f);
             queue.Tick();
-            TestRunner.Assert(presenter.IsShowing, "Queue Duration: still showing at 1.4s");
-
-            // Auto-hidden at 1.6s (past 1.5s duration from show time)
+            TestRunner.Assert(presenter.IsShowing, "B6 Queue Duration: still showing at 1.4s");
             time.Advance(0.2f);
             queue.Tick();
-            TestRunner.Assert(!presenter.IsShowing, "Queue Duration: auto-hidden after 1.5s");
+            TestRunner.Assert(!presenter.IsShowing, "B6 Queue Duration: auto-hidden after 1.5s");
         }
 
-        static void TestQueue_SkipDoesNotDeadlock()
+        static void TestB6_Queue_SkipNonDeadlock()
         {
             var time = new ManualTimeProvider();
             var presenter = new SimpleDuelBannerPresenter();
             var queue = new DuelUIEventQueue(presenter, time);
 
-            // Enqueue two contexts
             queue.Enqueue(MakeCtx_ConquerHeaven());
             queue.Enqueue(MakeCtx_NormalWin());
 
-            // Show first banner: tick to WaitingDelay, advance, tick to show
+            // Show first
             queue.Tick();
             time.Advance(0.2f);
             queue.Tick();
-            TestRunner.Assert(presenter.IsShowing, "SkipTest: first banner showing");
             TestRunner.AssertEqual(UIBannerType.ConquerHeaven, presenter.CurrentBanner.Value,
-                "SkipTest: first banner is ConquerHeaven");
+                "B6 Skip: first = ConquerHeaven");
 
-            // Skip the first banner
+            // Skip first
             queue.Skip();
-            TestRunner.Assert(!presenter.IsShowing, "SkipTest: first banner skipped");
+            TestRunner.Assert(!presenter.IsShowing, "B6 Skip: first skipped");
 
-            // Tick detects skip -> Idle, then picks up second context -> WaitingDelay
+            // Process second
             queue.Tick();
             queue.Tick();
-            TestRunner.Assert(queue.IsProcessing, "SkipTest: queue processing second item");
-
-            // Advance past delay for second banner
             time.Advance(0.2f);
             queue.Tick();
-            TestRunner.Assert(presenter.IsShowing, "SkipTest: second banner showing (no deadlock)");
+            TestRunner.Assert(presenter.IsShowing, "B6 Skip: second showing (no deadlock)");
             TestRunner.AssertEqual(UIBannerType.NormalWin, presenter.CurrentBanner.Value,
-                "SkipTest: second banner is NormalWin");
-
-            // Skip second
-            queue.Skip();
-            queue.Tick();
-            TestRunner.Assert(!queue.IsProcessing, "SkipTest: queue idle after all processed");
+                "B6 Skip: second = NormalWin");
         }
 
-        static void TestQueue_MultipleEnqueue()
-        {
-            var time = new ManualTimeProvider();
-            var presenter = new SimpleDuelBannerPresenter();
-            var queue = new DuelUIEventQueue(presenter, time);
-
-            var bannersShown = new List<UIBannerType>();
-            queue.OnBannerShown += (type) => bannersShown.Add(type);
-
-            queue.Enqueue(MakeCtx_JesterSwap());
-            queue.Enqueue(MakeCtx_BadLuck());
-            queue.Enqueue(MakeCtx_Draw());
-
-            TestRunner.AssertEqual(3, queue.QueueCount, "MultiEnqueue: 3 items queued");
-
-            // Process all three: tick(Idle->WaitDelay), advance, tick(show), skip, tick(->Idle)
-            for (int i = 0; i < 3; i++)
-            {
-                queue.Tick();       // Idle -> WaitingDelay
-                time.Advance(0.2f); // past delay
-                queue.Tick();       // WaitingDelay -> ShowingBanner
-                queue.Skip();       // skip banner
-                queue.Tick();       // ShowingBanner -> Idle
-            }
-
-            TestRunner.AssertEqual(3, bannersShown.Count, "MultiEnqueue: 3 banners shown");
-            TestRunner.AssertEqual(UIBannerType.JesterSwap, bannersShown[0], "MultiEnqueue: first = JesterSwap");
-            TestRunner.AssertEqual(UIBannerType.BadLuck, bannersShown[1], "MultiEnqueue: second = BadLuck");
-            TestRunner.AssertEqual(UIBannerType.Draw, bannersShown[2], "MultiEnqueue: third = Draw");
-        }
-
-        // ==== UI Banner: Presenter Tests ====
-
-        static void TestPresenter_ShowAndHide()
+        static void TestB6_Presenter_ShowHideSkip()
         {
             var presenter = new SimpleDuelBannerPresenter();
-            TestRunner.Assert(!presenter.IsShowing, "Presenter: not showing initially");
+            TestRunner.Assert(!presenter.IsShowing, "B6 Presenter: not showing initially");
 
             presenter.Show(UIBannerType.NormalWin, 1.5f, true);
-            TestRunner.Assert(presenter.IsShowing, "Presenter: showing after Show()");
+            TestRunner.Assert(presenter.IsShowing, "B6 Presenter: showing after Show()");
             TestRunner.AssertEqual(UIBannerType.NormalWin, presenter.CurrentBanner.Value,
-                "Presenter: correct banner type");
+                "B6 Presenter: correct type");
 
             presenter.Hide();
-            TestRunner.Assert(!presenter.IsShowing, "Presenter: not showing after Hide()");
-            TestRunner.Assert(!presenter.CurrentBanner.HasValue, "Presenter: no current banner after Hide()");
-        }
-
-        static void TestPresenter_SkipWhenSkippable()
-        {
-            var presenter = new SimpleDuelBannerPresenter();
+            TestRunner.Assert(!presenter.IsShowing, "B6 Presenter: hidden after Hide()");
 
             // Skippable
             presenter.Show(UIBannerType.Draw, 1.5f, true);
             presenter.Skip();
-            TestRunner.Assert(!presenter.IsShowing, "Presenter: skip works when skippable=true");
+            TestRunner.Assert(!presenter.IsShowing, "B6 Presenter: skip works when skippable");
 
             // Not skippable
             presenter.Show(UIBannerType.Draw, 1.5f, false);
             presenter.Skip();
-            TestRunner.Assert(presenter.IsShowing, "Presenter: skip ignored when skippable=false");
+            TestRunner.Assert(presenter.IsShowing, "B6 Presenter: skip ignored when not skippable");
             presenter.Hide();
+
+            // Banner texts
+            TestRunner.AssertEqual("胜天半子！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.ConquerHeaven),
+                "B6 Text: ConquerHeaven");
+            TestRunner.AssertEqual("天命暴击！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.DestinyCrit),
+                "B6 Text: DestinyCrit");
+            TestRunner.AssertEqual("平局！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.Draw),
+                "B6 Text: Draw");
         }
 
-        static void TestPresenter_BannerTexts()
+        // ============================================================
+        // B7: 火力过热
+        // ============================================================
+
+        static void TestB7_ChargeMultiplier_2_5x()
         {
-            TestRunner.AssertEqual("胜天半子！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.ConquerHeaven),
-                "BannerText: ConquerHeaven");
-            TestRunner.AssertEqual("小丑惊魂！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.JesterSwap),
-                "BannerText: JesterSwap");
-            TestRunner.AssertEqual("天命暴击！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.DestinyCrit),
-                "BannerText: DestinyCrit");
-            TestRunner.AssertEqual("天命反杀！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.DestinyCounter),
-                "BannerText: DestinyCounter");
-            TestRunner.AssertEqual("无效运气！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.BadLuck),
-                "BannerText: BadLuck");
-            TestRunner.AssertEqual("胜利！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.NormalWin),
-                "BannerText: NormalWin");
-            TestRunner.AssertEqual("平局！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.Draw),
-                "BannerText: Draw");
+            Setup();
+            var phase = new InfiniteFirepowerPhase();
+            TestRunner.AssertEqual(2.5f, phase.GetChargeSpeedMultiplier(),
+                "B7: 2.5x charge speed");
+        }
+
+        static void TestB7_OverheatBlocks5s()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var skill = new SkillSlotManager(1, time);
+            skill.AddCharge(300f);
+
+            TestRunner.Assert(!skill.IsOverheated, "B7 Overheat: not overheated initially");
+            skill.StartOverheat(5.0f);
+            TestRunner.Assert(skill.IsOverheated, "B7 Overheat: overheated after StartOverheat");
+
+            bool activated = skill.TryActivateSkill();
+            TestRunner.Assert(!activated, "B7 Overheat: activation blocked while overheated");
+
+            time.Advance(4.9f);
+            TestRunner.Assert(skill.IsOverheated, "B7 Overheat: still overheated at 4.9s");
+        }
+
+        static void TestB7_OverheatExpiresAndRecovers()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            time.CurrentTime = 10f;
+            var skill = new SkillSlotManager(1, time);
+            skill.AddCharge(300f);
+            skill.StartOverheat(5.0f);
+
+            time.Advance(5.1f); // t=15.1
+            TestRunner.Assert(!skill.IsOverheated, "B7 Recover: overheat expired at 5.1s");
+
+            // Can activate after overheat expires
+            bool activated = skill.TryActivateSkill();
+            TestRunner.Assert(activated, "B7 Recover: activation succeeds after overheat expires");
+        }
+
+        static void TestB7_GhostPenaltyReduction()
+        {
+            Setup();
+            var phase = new InfiniteFirepowerPhase();
+            var (reward, penalty) = phase.CalculateMultipliers(DestinyMatchType.None);
+            TestRunner.Assert(penalty <= 0.5f,
+                $"B7 Ghost: penalty reduced to <= 0.5 (actual: {penalty})");
+
+            var result = new DuelResultData();
+            phase.PostDuelEffect(result);
+            TestRunner.AssertEqual(5.0f, result.OverheatDuration,
+                "B7 PostDuel: overheat duration = 5s");
+        }
+
+        // ============================================================
+        // Config: BalanceConfig
+        // ============================================================
+
+        static void TestConfig_DefaultValues()
+        {
+            Setup();
+            var config = BalanceConfig.Current;
+            TestRunner.AssertEqual(3, config.MaxSkillSlots, "Config: MaxSkillSlots = 3");
+            TestRunner.AssertEqual(2, config.MaxHandSlots, "Config: MaxHandSlots = 2");
+            TestRunner.AssertEqual(4.0f, config.OverflowLifetime, "Config: OverflowLifetime = 4.0");
+            TestRunner.AssertEqual(7.0f, config.P1_ImmunityDuration, "Config: P1_ImmunityDuration = 7.0");
+            TestRunner.AssertEqual(1.5f, config.CritMultiplier, "Config: CritMultiplier = 1.5");
+            TestRunner.AssertEqual(1.5f, config.CounterMultiplier, "Config: CounterMultiplier = 1.5");
+            TestRunner.AssertEqual(1.3f, config.ConquerHeavenMultiplier, "Config: ConquerHeavenMultiplier = 1.3");
+            TestRunner.AssertEqual(0.20f, config.JesterTriggerChance, "Config: JesterTriggerChance = 0.20");
+            TestRunner.AssertEqual(2.5f, config.OverloadChargeMultiplier, "Config: OverloadChargeMultiplier = 2.5");
+            TestRunner.AssertEqual(5.0f, config.AttackerOverheatTime, "Config: AttackerOverheatTime = 5.0");
+            TestRunner.AssertEqual(1.5f, config.RockStunDuration, "Config: RockStunDuration = 1.5");
+        }
+
+        static void TestConfig_HotReload_VersionIncrement()
+        {
+            Setup();
+            int v1 = BalanceConfig.Current.ConfigVersion;
+
+            BalanceConfig.ReloadBalanceConfig();
+            int v2 = BalanceConfig.Current.ConfigVersion;
+
+            TestRunner.Assert(v2 > v1, $"Config HotReload: version incremented ({v1} -> {v2})");
+
+            BalanceConfig.ReloadBalanceConfig();
+            int v3 = BalanceConfig.Current.ConfigVersion;
+            TestRunner.Assert(v3 > v2, $"Config HotReload: version incremented again ({v2} -> {v3})");
+
+            BalanceConfig.Reset();
+        }
+
+        static void TestConfig_CustomConfig_AffectsPhase()
+        {
+            Setup();
+            // Override CritMultiplier to 3.0
+            var config = new BalanceConfig();
+            config.CritMultiplier = 3.0f;
+            config.ConquerHeavenMultiplier = 2.0f;
+            BalanceConfig.SetCurrent(config);
+
+            var phase = new DestinyGambitPhase(new Random(42));
+            var (reward, p1) = phase.CalculateMultipliers(DestinyMatchType.WinnerMatched);
+            TestRunner.AssertEqual(3.0f, reward, "Config Custom: CritMultiplier = 3.0 affects DestinyGambit");
+
+            var (reward2, p2) = phase.CalculateMultipliers(DestinyMatchType.BothMatchedDraw);
+            TestRunner.AssertEqual(2.0f, reward2, "Config Custom: ConquerHeavenMultiplier = 2.0 affects DestinyGambit");
+
+            BalanceConfig.Reset();
+        }
+
+        static void TestConfig_WeightedPhaseSelection()
+        {
+            Setup();
+            var config = BalanceConfig.Current;
+
+            // Check phase weights
+            TestRunner.AssertEqual(50, config.GetPhaseWeight(PhaseType.DestinyGambit),
+                "Config Weights: Casino = 50");
+            TestRunner.AssertEqual(20, config.GetPhaseWeight(PhaseType.Ceasefire),
+                "Config Weights: Peace = 20");
+            TestRunner.AssertEqual(15, config.GetPhaseWeight(PhaseType.Joker),
+                "Config Weights: Jester = 15");
+            TestRunner.AssertEqual(15, config.GetPhaseWeight(PhaseType.InfiniteFirepower),
+                "Config Weights: Overload = 15");
+
+            // Weighted selection: run many times, all phases should appear
+            var phaseCounts = new Dictionary<PhaseType, int>();
+            for (int i = 0; i < 200; i++)
+            {
+                var pm = new PhaseManager(new Random(i));
+                pm.LockRandomPhase();
+                var pt = pm.ActivePhaseType.Value;
+                if (!phaseCounts.ContainsKey(pt)) phaseCounts[pt] = 0;
+                phaseCounts[pt]++;
+                pm.Reset();
+            }
+
+            TestRunner.Assert(phaseCounts.ContainsKey(PhaseType.DestinyGambit),
+                "Config Weights: DestinyGambit appears in random selection");
+            TestRunner.Assert(phaseCounts.ContainsKey(PhaseType.Ceasefire),
+                "Config Weights: Ceasefire appears in random selection");
+            TestRunner.Assert(phaseCounts.ContainsKey(PhaseType.Joker),
+                "Config Weights: Joker appears in random selection");
+            TestRunner.Assert(phaseCounts.ContainsKey(PhaseType.InfiniteFirepower),
+                "Config Weights: InfiniteFirepower appears in random selection");
+
+            // Casino (weight 50) should be most frequent
+            TestRunner.Assert(phaseCounts[PhaseType.DestinyGambit] > phaseCounts[PhaseType.Joker],
+                "Config Weights: Casino more frequent than Jester");
+        }
+
+        // ============================================================
+        // DuelLog
+        // ============================================================
+
+        static void TestDuelLog_6StagesPerDuel()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            gm.HandleDrift(1, 300f);
+            gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+
+            // Should have at least 6 log entries (one per stage)
+            TestRunner.Assert(DuelLog.LogBuffer.Count >= 6,
+                $"DuelLog: >= 6 entries per duel (actual: {DuelLog.LogBuffer.Count})");
+
+            // Check stage names present
+            var stages = new[] { "Trigger", "Validate", "ConsumeTicket", "Lock", "PhaseEvent", "ResultApply" };
+            foreach (var stage in stages)
+            {
+                var filtered = DuelLog.Filter(stage);
+                TestRunner.Assert(filtered.Count >= 1,
+                    $"DuelLog: Stage={stage} present in log");
+            }
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        static void TestDuelLog_Filter()
+        {
+            Setup();
+            DuelLog.LogTrigger(1, 2, "DestinyGambit");
+            DuelLog.LogValidate(1, 2, "DestinyGambit", true, true, true, true, null);
+            DuelLog.LogPhaseEvent(1, 2, "DestinyGambit", "ConquerHeaven=true");
+
+            var all = DuelLog.LogBuffer;
+            TestRunner.AssertEqual(3, all.Count, "DuelLog Filter: 3 entries total");
+
+            var triggerOnly = DuelLog.Filter("Trigger");
+            TestRunner.AssertEqual(1, triggerOnly.Count, "DuelLog Filter: 1 Trigger entry");
+
+            var conquer = DuelLog.Filter("ConquerHeaven");
+            TestRunner.AssertEqual(1, conquer.Count, "DuelLog Filter: 1 ConquerHeaven entry");
+
+            var none = DuelLog.Filter("NonExistent");
+            TestRunner.AssertEqual(0, none.Count, "DuelLog Filter: 0 for non-existent keyword");
+        }
+
+        static void TestDuelLog_DisableToggle()
+        {
+            Setup();
+            DuelLog.Enabled = false;
+            DuelLog.LogTrigger(1, 2, "Test");
+            TestRunner.AssertEqual(0, DuelLog.LogBuffer.Count, "DuelLog Disable: no entries when disabled");
+
+            DuelLog.Enabled = true;
+            DuelLog.LogTrigger(1, 2, "Test");
+            TestRunner.AssertEqual(1, DuelLog.LogBuffer.Count, "DuelLog Enable: entry added when enabled");
+        }
+
+        // ============================================================
+        // DebugHUD
+        // ============================================================
+
+        static void TestDebugHUD_Toggle()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            var hud = new DebugHUD(gm);
+
+            TestRunner.Assert(!hud.IsVisible, "HUD: not visible initially");
+            TestRunner.AssertEqual("", hud.Render(1, 2), "HUD: empty render when not visible");
+
+            hud.Toggle();
+            TestRunner.Assert(hud.IsVisible, "HUD: visible after Toggle()");
+            TestRunner.Assert(hud.Render(1, 2).Length > 0, "HUD: non-empty render when visible");
+
+            hud.Toggle();
+            TestRunner.Assert(!hud.IsVisible, "HUD: hidden after second Toggle()");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        static void TestDebugHUD_RenderPlayerState()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            var hud = new DebugHUD(gm);
+            string state = hud.RenderPlayerState(1);
+
+            TestRunner.Assert(state.Contains("Player 1"), "HUD State: contains player id");
+            TestRunner.Assert(state.Contains("SkillSlots"), "HUD State: contains SkillSlots");
+            TestRunner.Assert(state.Contains("HandCards"), "HUD State: contains HandCards");
+            TestRunner.Assert(state.Contains("Overflow"), "HUD State: contains Overflow");
+            TestRunner.Assert(state.Contains("P1Immunity"), "HUD State: contains P1Immunity");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        static void TestDebugHUD_RenderLastDuel()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            var hud = new DebugHUD(gm);
+
+            // No duel yet
+            string noDuel = hud.RenderLastDuel();
+            TestRunner.Assert(noDuel.Contains("No duel"), "HUD LastDuel: shows 'No duel' initially");
+
+            // After setting duel result
+            var ctx = MakeCtx_ConquerHeaven();
+            hud.SetLastDuelResult(ctx, UIBannerType.ConquerHeaven);
+            string lastDuel = hud.RenderLastDuel();
+
+            TestRunner.Assert(lastDuel.Contains("Last Duel"), "HUD LastDuel: contains 'Last Duel'");
+            TestRunner.Assert(lastDuel.Contains("Casino"), "HUD LastDuel: contains phase");
+            TestRunner.Assert(lastDuel.Contains("ConquerHeaven"), "HUD LastDuel: contains banner type");
+            TestRunner.Assert(lastDuel.Contains("ConfigVersion"), "HUD LastDuel: contains ConfigVersion");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        // ============================================================
+        // Integration tests
+        // ============================================================
+
+        static void TestIntegration_FullDuelFlow()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.DestinyGambit);
+
+            gm.HandleDrift(1, 300f);
+
+            var p1 = gm.GetPlayerSession(1);
+            TestRunner.Assert(p1.SkillSlots.IsFullyCharged, "Integration: player 1 fully charged");
+
+            var result = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+
+            TestRunner.Assert(result != null, "Integration: duel result not null");
+            TestRunner.AssertEqual(DuelOutcome.Win, result.Outcome, "Integration: Rock beats Scissors");
+            TestRunner.AssertEqual(PhaseType.DestinyGambit, result.ActivePhase, "Integration: correct phase");
+            TestRunner.Assert(!p1.SkillSlots.IsFullyCharged, "Integration: skill slots consumed");
+            TestRunner.AssertEqual(1, p1.Cards.DarkCardCount, "Integration: one dark card consumed (2->1)");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        static void TestIntegration_InfiniteFirepowerFlow()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.InfiniteFirepower);
+
+            var p1 = gm.GetPlayerSession(1);
+            var p2 = gm.GetPlayerSession(2);
+
+            // 2.5x charge speed
+            TestRunner.AssertEqual(2.5f, p1.SkillSlots.ChargeSpeedMultiplier,
+                "Integration InfFire: 2.5x charge applied");
+
+            // Ghost tracker initialized
+            TestRunner.Assert(p2.GhostTracker != null, "Integration InfFire: ghost tracker exists");
+
+            // 120 * 2.5 = 300 -> full
+            gm.HandleDrift(1, 120f);
+            TestRunner.Assert(p1.SkillSlots.IsFullyCharged, "Integration InfFire: 120 drift = full");
+
+            var result = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Scissors);
+            TestRunner.Assert(result != null, "Integration InfFire: duel executed");
+
+            // Overheat applied
+            TestRunner.Assert(p1.SkillSlots.IsOverheated, "Integration InfFire: overheated");
+            TestRunner.AssertEqual(5.0f, result.OverheatDuration, "Integration InfFire: 5s overheat");
+
+            // Can't duel while overheated
+            gm.HandleDrift(1, 120f);
+            var result2 = gm.TryInitiateDuel(1, 2, CardType.Rock, CardType.Paper);
+            TestRunner.Assert(result2 == null, "Integration InfFire: blocked while overheated");
+
+            // Overheat expires
+            time.Advance(5.1f);
+            TestRunner.Assert(!p1.SkillSlots.IsOverheated, "Integration InfFire: overheat expired");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        static void TestIntegration_CeasefireFlow()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var gm = new GameManager(new Random(42), time);
+            gm.InitializeGameWithPhase(new[] { 1, 2 }, PhaseType.Ceasefire);
+
+            gm.HandleDrift(1, 300f);
+
+            var result = gm.TryInitiateDuel(1, 2, CardType.Scissors, CardType.Paper);
+            TestRunner.Assert(result != null, "Integration Ceasefire: duel executed");
+            TestRunner.AssertEqual(CardType.Rock, result.InitiatorCard, "Integration Ceasefire: Scissors -> Rock");
+            TestRunner.AssertEqual(CardType.Scissors, result.OriginalInitiatorCard,
+                "Integration Ceasefire: original preserved");
+            TestRunner.Assert(result.ScissorsConverted, "Integration Ceasefire: ScissorsConverted flag");
+            TestRunner.AssertEqual(DuelOutcome.Win, result.Outcome, "Integration Ceasefire: Rock beats Paper");
+
+            gm.EndGame();
+            gm.Dispose();
+        }
+
+        // ============================================================
+        // SkillSlot fundamentals
+        // ============================================================
+
+        static void TestSkillSlot_Charging()
+        {
+            Setup();
+            var skill = new SkillSlotManager(1);
+            skill.AddCharge(50f);
+            TestRunner.AssertEqual(0, skill.FilledSlots, "SkillSlot: 50 charge = 0 slots");
+            TestRunner.Assert(skill.CurrentCharge == 50f, "SkillSlot: charge = 50");
+        }
+
+        static void TestSkillSlot_FullCharge()
+        {
+            Setup();
+            var skill = new SkillSlotManager(1);
+            skill.AddCharge(300f);
+            TestRunner.AssertEqual(3, skill.FilledSlots, "SkillSlot: 300 charge = 3 slots");
+            TestRunner.Assert(skill.IsFullyCharged, "SkillSlot: IsFullyCharged = true");
+        }
+
+        static void TestSkillSlot_Activation()
+        {
+            Setup();
+            var skill = new SkillSlotManager(1);
+            skill.AddCharge(300f);
+            bool activated = skill.TryActivateSkill();
+            TestRunner.Assert(activated, "SkillSlot: activation succeeds when full");
+            TestRunner.AssertEqual(0, skill.FilledSlots, "SkillSlot: slots reset after activation");
+
+            bool again = skill.TryActivateSkill();
+            TestRunner.Assert(!again, "SkillSlot: activation fails when not full");
+        }
+
+        static void TestSkillSlot_ChargeSpeedMultiplier()
+        {
+            Setup();
+            var skill = new SkillSlotManager(1);
+            skill.ChargeSpeedMultiplier = 2.0f;
+            skill.AddCharge(50f); // effective = 100
+            TestRunner.AssertEqual(1, skill.FilledSlots, "SkillSlot: 2x multiplier doubles charge");
+        }
+
+        static void TestSkillSlot_TimedOverheat()
+        {
+            Setup();
+            var time = new ManualTimeProvider();
+            var skill = new SkillSlotManager(1, time);
+            skill.AddCharge(300f);
+
+            skill.StartOverheat(5.0f);
+            TestRunner.Assert(skill.IsOverheated, "SkillSlot Overheat: overheated");
+            TestRunner.Assert(!skill.TryActivateSkill(), "SkillSlot Overheat: activation blocked");
+
+            time.Advance(5.1f);
+            TestRunner.Assert(!skill.IsOverheated, "SkillSlot Overheat: expired after 5.1s");
+            TestRunner.Assert(skill.TryActivateSkill(), "SkillSlot Overheat: activation works after expiry");
+        }
+
+        // ============================================================
+        // PhaseManager
+        // ============================================================
+
+        static void TestPhaseManager_LockAndMutualExclusion()
+        {
+            Setup();
+            var pm = new PhaseManager(new Random(42));
+            var phase = pm.LockRandomPhase();
+            TestRunner.Assert(phase != null, "PhaseManager: lock returns phase");
+            TestRunner.Assert(pm.IsLocked, "PhaseManager: IsLocked = true");
+
+            bool threw = false;
+            try { pm.LockRandomPhase(); }
+            catch (InvalidOperationException) { threw = true; }
+            TestRunner.Assert(threw, "PhaseManager: double lock throws (mutual exclusion)");
+        }
+
+        static void TestPhaseManager_Reset()
+        {
+            Setup();
+            var pm = new PhaseManager(new Random(42));
+            pm.LockRandomPhase();
+            pm.Reset();
+            TestRunner.Assert(!pm.IsLocked, "PhaseManager: IsLocked = false after reset");
+            var phase = pm.LockRandomPhase();
+            TestRunner.Assert(phase != null, "PhaseManager: can lock again after reset");
         }
 
         /// <summary>

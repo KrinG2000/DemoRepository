@@ -1496,6 +1496,8 @@ namespace RacingCardGame.Tests
         public static void Main(string[] args)
         {
             RunAll();
+            Task5IntegrationTests.RunAll();
+            TestRunner.PrintSummary();
             Environment.Exit(TestRunner.FailedCount > 0 ? 1 : 0);
         }
     }

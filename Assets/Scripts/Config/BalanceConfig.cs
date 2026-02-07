@@ -52,6 +52,41 @@ namespace RacingCardGame.Config
         // ==== Peace (止戈相位 / Ceasefire) ====
         public float RockStunDuration = 1.5f;
 
+        // ==== Task 5: 赛车/对决流程参数 ====
+
+        // Track & Simulation
+        public float TrackLength = 1000f;
+        public float BaseCarSpeed = 50f;
+        public float DriftChargeBaseRate = 33.3f;   // 每秒充能量 (~3s填一格)
+        public float CardPickupInterval = 100f;     // 道具箱间距 (米)
+        public int CardPickupCount = 8;             // 赛道上道具箱数量
+
+        // Duel Flow
+        public float DuelPickTimeLimit = 2.5f;      // 选牌时间限制 (秒)
+        public float DuelRaycastRange = 30f;        // E键射线长度 (米)
+
+        // Winner Rewards — 按出牌类型
+        public float ScissorsWinSpeedMultiplier = 1.35f;
+        public float ScissorsWinDuration = 3.0f;
+        public float PaperWinSpeedMultiplier = 1.40f;
+        public float PaperWinDuration = 2.5f;
+        public float RockWinSuperArmorDuration = 4.0f;
+
+        // Loser Penalties — 按赢家出牌类型
+        public float ScissorsLoseFrictionMultiplier = 0.5f;
+        public float ScissorsLoseFrictionDuration = 2.0f;
+        public float ScissorsLoseSpeedCap = 0.7f;
+        public float ScissorsLoseCapDuration = 2.0f;
+        public float PaperLoseSlowMultiplier = 0.9f;
+        public float PaperLoseSlowDuration = 1.5f;
+        // Rock lose: 无惩罚
+
+        // AI
+        public float AIDuelCheckInterval = 5.0f;    // AI检测发起对决的间隔 (秒)
+        public float AIDuelChance = 0.3f;            // AI每次检测发起对决的概率
+        public float AIMinDuelDistance = 10f;         // AI发起对决的最小距离
+        public float AIMaxDuelDistance = 30f;         // AI发起对决的最大距离
+
         /// <summary>
         /// 替换当前配置实例 (用于测试或运行时修改)
         /// </summary>

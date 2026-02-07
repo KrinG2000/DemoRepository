@@ -136,9 +136,8 @@ namespace RacingCardGame.DuelFlow
             _presentation.EnterSubspace(attackerId, defenderId);
             GameEvents.RaiseSubspaceEntered(attackerId, defenderId);
 
-            // Record ghost pull (Overload)
-            if (defenderSession.GhostTracker != null)
-                defenderSession.GhostTracker.RecordPull();
+            // Note: Ghost pull recording is handled by GameManager.TryInitiateDuel
+            // to avoid double-counting. Do NOT call RecordPull() here.
 
             // Clear overflow on subspace entry
             attackerSession.Cards.ClearOverflow();
@@ -245,11 +244,9 @@ namespace RacingCardGame.DuelFlow
             if (_cars.ContainsKey(loserId))
             {
                 var loserCar = _cars[loserId];
+                // PenaltyMultiplier already includes Counter (1.5x) from phase layer
+                // Do NOT re-multiply here to avoid double-apply
                 float penaltyMul = result.PenaltyMultiplier;
-
-                // DestinyCounter: 败者惩罚倍率再乘1.5
-                if (result.DestinyEffect == DestinyEffectType.Counter)
-                    penaltyMul *= cfg.CounterMultiplier;
 
                 switch (winnerCard)
                 {

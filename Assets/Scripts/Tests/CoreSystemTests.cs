@@ -15,6 +15,7 @@ using RacingCardGame.Skill;
 using RacingCardGame.Phase;
 using RacingCardGame.Duel;
 using RacingCardGame.Manager;
+using RacingCardGame.UI;
 
 namespace RacingCardGame.Tests
 {
@@ -148,6 +149,36 @@ namespace RacingCardGame.Tests
             TestFullDuelFlow();
             TestInfiniteFirepower_FullFlow();
             TestCeasefire_FullFlow();
+
+            Console.WriteLine("\n=== UI Banner: PickBanner Priority Tests ===");
+            TestPickBanner_P1_ConquerHeaven();
+            TestPickBanner_P2_JesterSwap();
+            TestPickBanner_P3_DestinyCrit();
+            TestPickBanner_P4_DestinyCounter();
+            TestPickBanner_P5_BadLuck();
+            TestPickBanner_P6_NormalWin();
+            TestPickBanner_P7_Draw();
+            TestPickBanner_PriorityConquerHeavenOverDraw();
+            TestPickBanner_PriorityCritOverNormalWin();
+
+            Console.WriteLine("\n=== UI Banner: DuelResultAdapter Tests ===");
+            TestAdapter_CasinoPhaseConversion();
+            TestAdapter_JesterPhaseConversion();
+            TestAdapter_PeacePhaseConversion();
+            TestAdapter_OverloadPhaseConversion();
+            TestAdapter_WinnerLoserMapping();
+
+            Console.WriteLine("\n=== UI Banner: DuelUIEventQueue Tests ===");
+            TestQueue_SingleBannerPerContext();
+            TestQueue_DelayBeforeShow();
+            TestQueue_BannerDuration();
+            TestQueue_SkipDoesNotDeadlock();
+            TestQueue_MultipleEnqueue();
+
+            Console.WriteLine("\n=== UI Banner: Presenter Tests ===");
+            TestPresenter_ShowAndHide();
+            TestPresenter_SkipWhenSkippable();
+            TestPresenter_BannerTexts();
 
             TestRunner.PrintSummary();
         }
@@ -906,6 +937,471 @@ namespace RacingCardGame.Tests
 
             gm.EndGame();
             gm.Dispose();
+        }
+
+        // ==== UI Banner: PickBanner Priority Tests ====
+
+        static DuelResultContext MakeCtx_ConquerHeaven()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Casino,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Rock, DefenderPlayed = CardType.Rock,
+                IsDraw = true, WinnerId = null, LoserId = null,
+                CasinoHouseCard = CardType.Rock,
+                CasinoAttackerHitHouse = true, CasinoDefenderHitHouse = true,
+                CasinoLoserHitHouse = false,
+                CasinoConquerHeavenTriggered = true,
+                MultiplierAppliedToWinner = 1.27f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_JesterSwap()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Jester,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Paper, DefenderPlayed = CardType.Rock,
+                IsDraw = false, WinnerId = 1, LoserId = 2,
+                JesterSwapTriggered = true,
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_DestinyCrit()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Casino,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Rock, DefenderPlayed = CardType.Scissors,
+                IsDraw = false, WinnerId = 1, LoserId = 2,
+                CasinoHouseCard = CardType.Rock,
+                CasinoAttackerHitHouse = true, CasinoDefenderHitHouse = false,
+                CasinoLoserHitHouse = false,
+                MultiplierAppliedToWinner = 2.0f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_DestinyCounter()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Casino,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Scissors, DefenderPlayed = CardType.Rock,
+                IsDraw = false, WinnerId = 2, LoserId = 1,
+                CasinoHouseCard = CardType.Rock,
+                CasinoAttackerHitHouse = false, CasinoDefenderHitHouse = true,
+                CasinoLoserHitHouse = false,
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 2.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_BadLuck()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Casino,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Rock, DefenderPlayed = CardType.Scissors,
+                IsDraw = false, WinnerId = 1, LoserId = 2,
+                CasinoHouseCard = CardType.Scissors,
+                CasinoAttackerHitHouse = false, CasinoDefenderHitHouse = true,
+                CasinoLoserHitHouse = true,
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_NormalWin()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Standard,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Rock, DefenderPlayed = CardType.Scissors,
+                IsDraw = false, WinnerId = 1, LoserId = 2,
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static DuelResultContext MakeCtx_Draw()
+        {
+            return new DuelResultContext
+            {
+                Phase = DuelPhase.Standard,
+                AttackerId = 1, DefenderId = 2,
+                AttackerPlayed = CardType.Rock, DefenderPlayed = CardType.Rock,
+                IsDraw = true, WinnerId = null, LoserId = null,
+                MultiplierAppliedToWinner = 1.0f, MultiplierAppliedToLoser = 1.0f
+            };
+        }
+
+        static void TestPickBanner_P1_ConquerHeaven()
+        {
+            var ctx = MakeCtx_ConquerHeaven();
+            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P1: ConquerHeaven");
+        }
+
+        static void TestPickBanner_P2_JesterSwap()
+        {
+            var ctx = MakeCtx_JesterSwap();
+            TestRunner.AssertEqual(UIBannerType.JesterSwap, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P2: JesterSwap");
+        }
+
+        static void TestPickBanner_P3_DestinyCrit()
+        {
+            var ctx = MakeCtx_DestinyCrit();
+            TestRunner.AssertEqual(UIBannerType.DestinyCrit, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P3: DestinyCrit (attacker=winner, hit house)");
+        }
+
+        static void TestPickBanner_P4_DestinyCounter()
+        {
+            var ctx = MakeCtx_DestinyCounter();
+            TestRunner.AssertEqual(UIBannerType.DestinyCounter, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P4: DestinyCounter (defender=winner, hit house)");
+        }
+
+        static void TestPickBanner_P5_BadLuck()
+        {
+            var ctx = MakeCtx_BadLuck();
+            TestRunner.AssertEqual(UIBannerType.BadLuck, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P5: BadLuck (loser hit house)");
+        }
+
+        static void TestPickBanner_P6_NormalWin()
+        {
+            var ctx = MakeCtx_NormalWin();
+            TestRunner.AssertEqual(UIBannerType.NormalWin, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P6: NormalWin");
+        }
+
+        static void TestPickBanner_P7_Draw()
+        {
+            var ctx = MakeCtx_Draw();
+            TestRunner.AssertEqual(UIBannerType.Draw, DuelBannerResolver.PickBanner(ctx),
+                "PickBanner P7: Draw");
+        }
+
+        static void TestPickBanner_PriorityConquerHeavenOverDraw()
+        {
+            // ConquerHeaven ctx is also a draw, but P1 should take priority over P7
+            var ctx = MakeCtx_ConquerHeaven();
+            TestRunner.Assert(ctx.IsDraw, "PriorityTest: ConquerHeaven ctx is indeed a draw");
+            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, DuelBannerResolver.PickBanner(ctx),
+                "PriorityTest: ConquerHeaven (P1) beats Draw (P7)");
+        }
+
+        static void TestPickBanner_PriorityCritOverNormalWin()
+        {
+            // DestinyCrit ctx also has a winner, so NormalWin would match too
+            var ctx = MakeCtx_DestinyCrit();
+            TestRunner.Assert(ctx.WinnerId.HasValue, "PriorityTest: DestinyCrit ctx has a winner");
+            TestRunner.AssertEqual(UIBannerType.DestinyCrit, DuelBannerResolver.PickBanner(ctx),
+                "PriorityTest: DestinyCrit (P3) beats NormalWin (P6)");
+        }
+
+        // ==== UI Banner: DuelResultAdapter Tests ====
+
+        static void TestAdapter_CasinoPhaseConversion()
+        {
+            var data = new DuelResultData
+            {
+                InitiatorId = 1, DefenderId = 2,
+                InitiatorCard = CardType.Rock, DefenderCard = CardType.Rock,
+                DestinyCard = CardType.Rock,
+                Outcome = DuelOutcome.Draw,
+                ActivePhase = PhaseType.DestinyGambit,
+                IsShengTianBanZi = true,
+                RewardMultiplier = 1.27f, PenaltyMultiplier = 1.0f
+            };
+            var ctx = DuelResultAdapter.Convert(data);
+            TestRunner.AssertEqual(DuelPhase.Casino, ctx.Phase, "Adapter: DestinyGambit -> Casino");
+            TestRunner.Assert(ctx.CasinoConquerHeavenTriggered, "Adapter: ShengTianBanZi -> ConquerHeaven");
+            TestRunner.Assert(ctx.CasinoAttackerHitHouse, "Adapter: attacker Rock == destiny Rock");
+            TestRunner.Assert(ctx.CasinoDefenderHitHouse, "Adapter: defender Rock == destiny Rock");
+            TestRunner.Assert(ctx.IsDraw, "Adapter: Draw mapped correctly");
+            TestRunner.Assert(!ctx.WinnerId.HasValue, "Adapter: no winner on draw");
+        }
+
+        static void TestAdapter_JesterPhaseConversion()
+        {
+            var data = new DuelResultData
+            {
+                InitiatorId = 1, DefenderId = 2,
+                InitiatorCard = CardType.Paper, DefenderCard = CardType.Rock,
+                Outcome = DuelOutcome.Win,
+                ActivePhase = PhaseType.Joker,
+                CardsSwapped = true,
+                RewardMultiplier = 1.0f, PenaltyMultiplier = 1.0f
+            };
+            var ctx = DuelResultAdapter.Convert(data);
+            TestRunner.AssertEqual(DuelPhase.Jester, ctx.Phase, "Adapter: Joker -> Jester");
+            TestRunner.Assert(ctx.JesterSwapTriggered, "Adapter: CardsSwapped -> JesterSwapTriggered");
+        }
+
+        static void TestAdapter_PeacePhaseConversion()
+        {
+            var data = new DuelResultData
+            {
+                InitiatorId = 1, DefenderId = 2,
+                InitiatorCard = CardType.Rock, DefenderCard = CardType.Paper,
+                OriginalInitiatorCard = CardType.Scissors,
+                Outcome = DuelOutcome.Win,
+                ActivePhase = PhaseType.Ceasefire,
+                ScissorsConverted = true,
+                RewardMultiplier = 1.0f, PenaltyMultiplier = 1.0f
+            };
+            var ctx = DuelResultAdapter.Convert(data);
+            TestRunner.AssertEqual(DuelPhase.Peace, ctx.Phase, "Adapter: Ceasefire -> Peace");
+            TestRunner.Assert(ctx.PeaceRuleApplied, "Adapter: ScissorsConverted -> PeaceRuleApplied");
+        }
+
+        static void TestAdapter_OverloadPhaseConversion()
+        {
+            var data = new DuelResultData
+            {
+                InitiatorId = 1, DefenderId = 2,
+                InitiatorCard = CardType.Rock, DefenderCard = CardType.Scissors,
+                Outcome = DuelOutcome.Win,
+                ActivePhase = PhaseType.InfiniteFirepower,
+                OverheatDuration = 5.0f,
+                GhostProtectionGranted = true,
+                RewardMultiplier = 1.0f, PenaltyMultiplier = 0.5f
+            };
+            var ctx = DuelResultAdapter.Convert(data);
+            TestRunner.AssertEqual(DuelPhase.Overload, ctx.Phase, "Adapter: InfiniteFirepower -> Overload");
+            TestRunner.Assert(ctx.OverloadAttackerOverheatApplied, "Adapter: overheat applied");
+            TestRunner.Assert(ctx.VictimGhostTriggered, "Adapter: ghost triggered");
+        }
+
+        static void TestAdapter_WinnerLoserMapping()
+        {
+            // Win: initiator is winner
+            var dataWin = new DuelResultData
+            {
+                InitiatorId = 10, DefenderId = 20,
+                Outcome = DuelOutcome.Win,
+                ActivePhase = PhaseType.DestinyGambit,
+                RewardMultiplier = 2.0f, PenaltyMultiplier = 1.0f
+            };
+            var ctxWin = DuelResultAdapter.Convert(dataWin);
+            TestRunner.AssertEqual(10, ctxWin.WinnerId.Value, "Adapter Win: winner = initiator");
+            TestRunner.AssertEqual(20, ctxWin.LoserId.Value, "Adapter Win: loser = defender");
+
+            // Lose: defender is winner
+            var dataLose = new DuelResultData
+            {
+                InitiatorId = 10, DefenderId = 20,
+                Outcome = DuelOutcome.Lose,
+                ActivePhase = PhaseType.DestinyGambit,
+                RewardMultiplier = 1.0f, PenaltyMultiplier = 2.0f
+            };
+            var ctxLose = DuelResultAdapter.Convert(dataLose);
+            TestRunner.AssertEqual(20, ctxLose.WinnerId.Value, "Adapter Lose: winner = defender");
+            TestRunner.AssertEqual(10, ctxLose.LoserId.Value, "Adapter Lose: loser = initiator");
+        }
+
+        // ==== UI Banner: DuelUIEventQueue Tests ====
+
+        static void TestQueue_SingleBannerPerContext()
+        {
+            var time = new ManualTimeProvider();
+            var presenter = new SimpleDuelBannerPresenter();
+            var queue = new DuelUIEventQueue(presenter, time);
+
+            int bannerCount = 0;
+            queue.OnBannerShown += (type) => bannerCount++;
+
+            var ctx = MakeCtx_ConquerHeaven();
+            queue.Enqueue(ctx);
+
+            // First tick: Idle -> WaitingDelay (stateEnteredTime = 0)
+            queue.Tick();
+            // Advance past delay
+            time.Advance(0.2f);
+            // Second tick: WaitingDelay -> ShowingBanner
+            queue.Tick();
+
+            TestRunner.AssertEqual(1, bannerCount, "Queue: exactly 1 banner shown per context");
+            TestRunner.Assert(presenter.IsShowing, "Queue: presenter is showing");
+            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, presenter.CurrentBanner.Value,
+                "Queue: correct banner type shown");
+        }
+
+        static void TestQueue_DelayBeforeShow()
+        {
+            var time = new ManualTimeProvider();
+            var presenter = new SimpleDuelBannerPresenter();
+            var queue = new DuelUIEventQueue(presenter, time);
+
+            queue.Enqueue(MakeCtx_NormalWin());
+
+            // Tick immediately - should not show yet (still in delay)
+            queue.Tick();
+            TestRunner.Assert(!presenter.IsShowing, "Queue: not showing during delay");
+
+            // Advance 0.10s (still within 0.15s delay)
+            time.Advance(0.10f);
+            queue.Tick();
+            TestRunner.Assert(!presenter.IsShowing, "Queue: still not showing at 0.10s");
+
+            // Advance past delay
+            time.Advance(0.06f);
+            queue.Tick();
+            TestRunner.Assert(presenter.IsShowing, "Queue: showing after 0.16s (past 0.15s delay)");
+        }
+
+        static void TestQueue_BannerDuration()
+        {
+            var time = new ManualTimeProvider();
+            var presenter = new SimpleDuelBannerPresenter();
+            var queue = new DuelUIEventQueue(presenter, time);
+
+            queue.Enqueue(MakeCtx_Draw());
+
+            // Tick to enter WaitingDelay, advance past delay, tick to show
+            queue.Tick();
+            time.Advance(0.2f);
+            queue.Tick();
+            TestRunner.Assert(presenter.IsShowing, "Queue Duration: banner showing");
+
+            // Still showing at 1.4s (within 1.5s duration from show time)
+            time.Advance(1.4f);
+            queue.Tick();
+            TestRunner.Assert(presenter.IsShowing, "Queue Duration: still showing at 1.4s");
+
+            // Auto-hidden at 1.6s (past 1.5s duration from show time)
+            time.Advance(0.2f);
+            queue.Tick();
+            TestRunner.Assert(!presenter.IsShowing, "Queue Duration: auto-hidden after 1.5s");
+        }
+
+        static void TestQueue_SkipDoesNotDeadlock()
+        {
+            var time = new ManualTimeProvider();
+            var presenter = new SimpleDuelBannerPresenter();
+            var queue = new DuelUIEventQueue(presenter, time);
+
+            // Enqueue two contexts
+            queue.Enqueue(MakeCtx_ConquerHeaven());
+            queue.Enqueue(MakeCtx_NormalWin());
+
+            // Show first banner: tick to WaitingDelay, advance, tick to show
+            queue.Tick();
+            time.Advance(0.2f);
+            queue.Tick();
+            TestRunner.Assert(presenter.IsShowing, "SkipTest: first banner showing");
+            TestRunner.AssertEqual(UIBannerType.ConquerHeaven, presenter.CurrentBanner.Value,
+                "SkipTest: first banner is ConquerHeaven");
+
+            // Skip the first banner
+            queue.Skip();
+            TestRunner.Assert(!presenter.IsShowing, "SkipTest: first banner skipped");
+
+            // Tick detects skip -> Idle, then picks up second context -> WaitingDelay
+            queue.Tick();
+            queue.Tick();
+            TestRunner.Assert(queue.IsProcessing, "SkipTest: queue processing second item");
+
+            // Advance past delay for second banner
+            time.Advance(0.2f);
+            queue.Tick();
+            TestRunner.Assert(presenter.IsShowing, "SkipTest: second banner showing (no deadlock)");
+            TestRunner.AssertEqual(UIBannerType.NormalWin, presenter.CurrentBanner.Value,
+                "SkipTest: second banner is NormalWin");
+
+            // Skip second
+            queue.Skip();
+            queue.Tick();
+            TestRunner.Assert(!queue.IsProcessing, "SkipTest: queue idle after all processed");
+        }
+
+        static void TestQueue_MultipleEnqueue()
+        {
+            var time = new ManualTimeProvider();
+            var presenter = new SimpleDuelBannerPresenter();
+            var queue = new DuelUIEventQueue(presenter, time);
+
+            var bannersShown = new List<UIBannerType>();
+            queue.OnBannerShown += (type) => bannersShown.Add(type);
+
+            queue.Enqueue(MakeCtx_JesterSwap());
+            queue.Enqueue(MakeCtx_BadLuck());
+            queue.Enqueue(MakeCtx_Draw());
+
+            TestRunner.AssertEqual(3, queue.QueueCount, "MultiEnqueue: 3 items queued");
+
+            // Process all three: tick(Idle->WaitDelay), advance, tick(show), skip, tick(->Idle)
+            for (int i = 0; i < 3; i++)
+            {
+                queue.Tick();       // Idle -> WaitingDelay
+                time.Advance(0.2f); // past delay
+                queue.Tick();       // WaitingDelay -> ShowingBanner
+                queue.Skip();       // skip banner
+                queue.Tick();       // ShowingBanner -> Idle
+            }
+
+            TestRunner.AssertEqual(3, bannersShown.Count, "MultiEnqueue: 3 banners shown");
+            TestRunner.AssertEqual(UIBannerType.JesterSwap, bannersShown[0], "MultiEnqueue: first = JesterSwap");
+            TestRunner.AssertEqual(UIBannerType.BadLuck, bannersShown[1], "MultiEnqueue: second = BadLuck");
+            TestRunner.AssertEqual(UIBannerType.Draw, bannersShown[2], "MultiEnqueue: third = Draw");
+        }
+
+        // ==== UI Banner: Presenter Tests ====
+
+        static void TestPresenter_ShowAndHide()
+        {
+            var presenter = new SimpleDuelBannerPresenter();
+            TestRunner.Assert(!presenter.IsShowing, "Presenter: not showing initially");
+
+            presenter.Show(UIBannerType.NormalWin, 1.5f, true);
+            TestRunner.Assert(presenter.IsShowing, "Presenter: showing after Show()");
+            TestRunner.AssertEqual(UIBannerType.NormalWin, presenter.CurrentBanner.Value,
+                "Presenter: correct banner type");
+
+            presenter.Hide();
+            TestRunner.Assert(!presenter.IsShowing, "Presenter: not showing after Hide()");
+            TestRunner.Assert(!presenter.CurrentBanner.HasValue, "Presenter: no current banner after Hide()");
+        }
+
+        static void TestPresenter_SkipWhenSkippable()
+        {
+            var presenter = new SimpleDuelBannerPresenter();
+
+            // Skippable
+            presenter.Show(UIBannerType.Draw, 1.5f, true);
+            presenter.Skip();
+            TestRunner.Assert(!presenter.IsShowing, "Presenter: skip works when skippable=true");
+
+            // Not skippable
+            presenter.Show(UIBannerType.Draw, 1.5f, false);
+            presenter.Skip();
+            TestRunner.Assert(presenter.IsShowing, "Presenter: skip ignored when skippable=false");
+            presenter.Hide();
+        }
+
+        static void TestPresenter_BannerTexts()
+        {
+            TestRunner.AssertEqual("胜天半子！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.ConquerHeaven),
+                "BannerText: ConquerHeaven");
+            TestRunner.AssertEqual("小丑惊魂！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.JesterSwap),
+                "BannerText: JesterSwap");
+            TestRunner.AssertEqual("天命暴击！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.DestinyCrit),
+                "BannerText: DestinyCrit");
+            TestRunner.AssertEqual("天命反杀！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.DestinyCounter),
+                "BannerText: DestinyCounter");
+            TestRunner.AssertEqual("无效运气！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.BadLuck),
+                "BannerText: BadLuck");
+            TestRunner.AssertEqual("胜利！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.NormalWin),
+                "BannerText: NormalWin");
+            TestRunner.AssertEqual("平局！", SimpleDuelBannerPresenter.GetBannerText(UIBannerType.Draw),
+                "BannerText: Draw");
         }
 
         /// <summary>

@@ -84,6 +84,38 @@ namespace RacingCardGame.Core
         /// </summary>
         public static event Action<int> OnGhostProtectionExpired;
 
+        // ---- 赛车/状态效果事件 (Task 5) ----
+
+        /// <summary>
+        /// 状态效果施加事件: (playerId, StatusEffect)
+        /// </summary>
+        public static event Action<int, StatusEffect> OnStatusEffectApplied;
+
+        /// <summary>
+        /// 状态效果过期事件: (playerId, StatusEffectType)
+        /// </summary>
+        public static event Action<int, StatusEffectType> OnStatusEffectExpired;
+
+        /// <summary>
+        /// 卡牌拾取事件: (playerId, CardType)
+        /// </summary>
+        public static event Action<int, CardType> OnCardPickedUp;
+
+        /// <summary>
+        /// 对决流程进入子空间: (attackerId, defenderId)
+        /// </summary>
+        public static event Action<int, int> OnSubspaceEntered;
+
+        /// <summary>
+        /// 对决流程退出子空间: (attackerId, defenderId)
+        /// </summary>
+        public static event Action<int, int> OnSubspaceExited;
+
+        /// <summary>
+        /// 对决验证失败事件: (attackerId, reason)
+        /// </summary>
+        public static event Action<int, string> OnDuelValidationFailed;
+
         // ---- 游戏生命周期事件 ----
 
         /// <summary>
@@ -110,6 +142,12 @@ namespace RacingCardGame.Core
         public static void RaiseOverheatEnded(int playerId) => OnOverheatEnded?.Invoke(playerId);
         public static void RaiseGhostProtectionActivated(int playerId, float duration) => OnGhostProtectionActivated?.Invoke(playerId, duration);
         public static void RaiseGhostProtectionExpired(int playerId) => OnGhostProtectionExpired?.Invoke(playerId);
+        public static void RaiseStatusEffectApplied(int playerId, StatusEffect effect) => OnStatusEffectApplied?.Invoke(playerId, effect);
+        public static void RaiseStatusEffectExpired(int playerId, StatusEffectType type) => OnStatusEffectExpired?.Invoke(playerId, type);
+        public static void RaiseCardPickedUp(int playerId, CardType cardType) => OnCardPickedUp?.Invoke(playerId, cardType);
+        public static void RaiseSubspaceEntered(int attackerId, int defenderId) => OnSubspaceEntered?.Invoke(attackerId, defenderId);
+        public static void RaiseSubspaceExited(int attackerId, int defenderId) => OnSubspaceExited?.Invoke(attackerId, defenderId);
+        public static void RaiseDuelValidationFailed(int attackerId, string reason) => OnDuelValidationFailed?.Invoke(attackerId, reason);
         public static void RaiseGameStart() => OnGameStart?.Invoke();
         public static void RaiseGameEnd() => OnGameEnd?.Invoke();
 
@@ -130,6 +168,12 @@ namespace RacingCardGame.Core
             OnOverheatEnded = null;
             OnGhostProtectionActivated = null;
             OnGhostProtectionExpired = null;
+            OnStatusEffectApplied = null;
+            OnStatusEffectExpired = null;
+            OnCardPickedUp = null;
+            OnSubspaceEntered = null;
+            OnSubspaceExited = null;
+            OnDuelValidationFailed = null;
             OnGameStart = null;
             OnGameEnd = null;
         }
